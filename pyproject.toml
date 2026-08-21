@@ -1,0 +1,49 @@
+[project]
+name = "ubiquiti"
+version = "0.1.0"
+description = "Doover apps to manage and interface with Ubiquiti devices"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "pydoover>=1.5.1",
+    "transitions>=0.9.2",
+    "asyncssh>=2.14.2",
+    "jinja2>=3.1.4",
+    "ubiquiti-common",
+]
+
+[project.scripts]
+# Ubiquiti AirMax — auto-config / provisioning
+doover-app-run-airmax = "ubiquiti_airmax:main"
+export-config-airmax = "ubiquiti_airmax.app_config:export"
+export-ui-airmax = "ubiquiti_airmax.app_ui:export"
+
+# Bench tool — drive discovery / diff / push against a real radio without the app harness.
+airos = "ubiquiti_common.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ubiquiti_airmax"]
+
+[tool.uv.sources]
+ubiquiti-common = { workspace = true }
+
+[tool.uv.workspace]
+members = ["packages/*"]
+
+[dependency-groups]
+dev = [
+    "aiohttp>=3.11.18",
+    "grpcio>=1.71.0",
+    "protobuf>=6.30.2",
+    "pytest>=8.3.5",
+    "pytest-asyncio>=0.26.0",
+    "requests>=2.32.3",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"

@@ -1,0 +1,41 @@
+# Bullet AC IP67 — station ("managed") mode overlay.
+#
+# VERIFIED against real hardware on 2026-08-21:
+#   model    Bullet AC IP67 (BulletAC-IP67)
+#   firmware 2WA.ar934x.v8.7.11.46972.220614.0419  (/etc/version: 2WA.v8.7.11)
+#   platform WA  (airMAX AC / airOS 8)
+#
+# Every key below was read off a live radio's /tmp/running.cfg. Keys that
+# documentation and intuition suggest but that DO NOT EXIST on this firmware:
+#   wireless.1.security      (it is wireless.1.security.type)
+#   wireless.1.authmode, wireless.1.mode, wireless.1.addmtikie
+#   netconf.1.ip, netconf.1.netmask   (see the netconf index warning below)
+#   dhcpc.status, system.hostname, aaa.1.wpa.1.mode
+#
+# !! netconf INDEX IS NOT A CONSTANT !!
+# netconf entries are per-interface and the ordering is the radio's, not a
+# convention. On this unit:
+#     netconf.1.devname = ath0   (wireless)
+#     netconf.2.devname = eth0   (ethernet)
+#     netconf.3.devname = br0    (the LAN bridge — this is the one with the IP)
+# Templating netconf.1.ip would put the address on the WIRELESS interface.
+# Confirm the index per model before reusing this:
+#     airos dump --host <ip> | grep 'netconf\..\.devname'
+#
+# In station mode (radio.1.mode=managed) the association credentials live under
+# wpasupplicant, not aaa — aaa.1.wpa.psk exists but is not what is used.
+#
+# Variables: ssid, psk, txpower, ackdistance, ip, netmask, gateway, dns
+
+wireless.1.ssid={{ ssid }}
+wpasupplicant.profile.1.network.1.ssid={{ ssid }}
+wpasupplicant.profile.1.network.1.psk={{ psk }}
+
+radio.1.txpower={{ txpower }}
+radio.1.ackdistance={{ ackdistance }}
+
+netconf.3.ip={{ ip }}
+netconf.3.netmask={{ netmask }}
+netconf.3.autoip.status=disabled
+route.1.gateway={{ gateway }}
+resolv.nameserver.1.ip={{ dns }}

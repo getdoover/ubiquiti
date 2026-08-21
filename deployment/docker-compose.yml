@@ -1,0 +1,14 @@
+services:
+  ubiquiti_airmax:
+    image: registry.doover.com/apps/ubiquiti_airmax:main
+    restart: unless-stopped
+    # host networking is REQUIRED: UBNT device discovery is an L2 broadcast to
+    # 255.255.255.255:10001 and will not cross a docker bridge.
+    network_mode: host
+    # NET_ADMIN is REQUIRED to add a secondary address (e.g. 192.168.1.x/24) so a
+    # factory-default radio sitting on 192.168.1.20 is reachable at all.
+    cap_add:
+      - NET_ADMIN
+    environment:
+      - APP_KEY=$APP_KEY
+      - HEALTHCHECK_PORT=$HEALTHCHECK_PORT

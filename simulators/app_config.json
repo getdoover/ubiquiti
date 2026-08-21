@@ -1,0 +1,42 @@
+{
+    "APP_KEY": "ubiquiti_airmax-1",
+    "APP_DISPLAY_NAME": "Bullet - North Tower",
+    "mac": "04:18:d6:aa:bb:cc",
+    "expected_model": "Bullet",
+    "platform": "XM",
+    "dry_run": true,
+    "interface": "eth0",
+    "manage_addresses": false,
+    "poll_interval": 30,
+    "discovery_timeout": 3.0,
+    "max_attempts": 3,
+    "retry_backoff": 60,
+    "failed_retry_after": 3600,
+    "reboot_wait": 120,
+    "ssh_port": 22,
+    "credentials": [
+        {
+            "username": "ubnt",
+            "password": "ubnt",
+            "label": "factory default"
+        }
+    ],
+    "overrides": [
+        {
+            "key": "radio.1.freq",
+            "value": "{{ freq }}"
+        },
+        {
+            "key": "wireless.1.ssid",
+            "value": "{{ ssid }}"
+        },
+        {
+            "key": "wireless.1.security",
+            "value": "WPA2"
+        }
+    ],
+    "variables": {
+        "freq": "5800",
+        "ssid": "SPAN-LINK"
+    }
+}

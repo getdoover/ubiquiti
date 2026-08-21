@@ -105,6 +105,16 @@ convergence is a background concern that reports its state.
   it while the radio is off-subnet; add/remove per pass would be thousands of
   netlink cycles a day.
 
+- **`spaneng/doover_device_base` is Alpine Linux** (3.23.4 as of 2026-08-21), not
+  Debian. Use `apk add --no-cache`, never `apt-get` — it is absent and the build
+  fails with exit 127. Several other apps in `~/doover-apps` still carry
+  `apt-get` in their Dockerfiles and will fail if rebuilt.
+- **Alpine's default `ip` is BusyBox and has no `-j`/JSON.** `netif.py` depends on
+  `ip -j addr show` / `ip -j route show`, so the Dockerfile installs real
+  `iproute2` (691 KiB). Without it the build passes and every interface lookup
+  fails at *runtime*. Verify with
+  `docker run --rm --entrypoint ip <image> -j route show default`.
+
 ## CI and publishing
 
 `.github/workflows/doover-app.yml` delegates to the shared

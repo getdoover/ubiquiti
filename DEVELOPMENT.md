@@ -118,6 +118,19 @@ No CI change is needed — confirm the new app shows up in
 
 ## Gotchas worth knowing
 
+- **The base image is Alpine, not Debian.** Package installs are
+  `apk add --no-cache`; `apt-get` exits 127. Alpine's `ip` is BusyBox with no
+  JSON support, so the Dockerfile installs real `iproute2` — `netif.py` calls
+  `ip -j` and fails at runtime without it. Build and smoke-test locally rather
+  than letting CI find out:
+
+  ```bash
+  docker build -t ubiquiti-airmax:test .
+  docker run --rm --entrypoint ip ubiquiti-airmax:test -j route show default
+  docker run --rm --entrypoint python ubiquiti-airmax:test -c "import ubiquiti_airmax"
+  ```
+
+
 - **Legacy SSH crypto.** airOS 6 runs an old dropbear whose kex, cipher and
   host-key algorithms modern asyncssh disables by default. `airos.py` sets the
   algorithm lists explicitly; without them, connections fail at key exchange with

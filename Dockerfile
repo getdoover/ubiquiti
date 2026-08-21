@@ -29,13 +29,12 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 ## SECOND STAGE ##
 FROM base_image AS final_image
 
-# iproute2 -> `ip addr add` for reaching factory radios on 192.168.1.0/24
-# iputils-arping / arp-scan -> MAC->IP fallback when UBNT discovery is disabled
-USER root
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends iproute2 arp-scan \
-    && rm -rf /var/lib/apt/lists/*
-USER app
+# The base image is Alpine, so this is `apk`, not `apt-get`.
+#
+# Alpine ships BusyBox `ip`, which has no `-j`/JSON output — netif.py depends on
+# `ip -j addr show` and `ip -j route show`, so real iproute2 is required or every
+# interface lookup fails at runtime. 691 KiB.
+RUN apk add --no-cache iproute2
 
 COPY --from=builder --chown=app:app /app /app
 ENV PATH="/app/.venv/bin:$PATH"

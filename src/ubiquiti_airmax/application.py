@@ -70,21 +70,14 @@ class AirMaxApplication(Application):
         self.last_result: str | None = None
 
         interface = self.config.interface.value
-        try:
-            await netif.assert_safe_interface(interface)
-        except netif.NetifError as exc:
-            if "not available" in str(exc):
-                log.warning(
-                    "%s — skipping the interface safety check. Discovery falls back "
-                    "to 255.255.255.255.",
-                    exc,
-                )
-            else:
-                # Loud and fatal on purpose: silently provisioning over the uplink
-                # can cut this device's own Doover connection, which is the one
-                # failure we cannot recover from remotely.
-                log.error("%s", exc)
-                raise
+        if await netif.carries_default_route(interface):
+            log.warning(
+                "provisioning interface %s also carries this device's default route. "
+                "Radios already reachable in its subnet provision normally, but "
+                "adding a helper address there would risk this device's own uplink, "
+                "so that will be refused.",
+                interface,
+            )
 
         self._sync_config()
         log.info(

@@ -242,3 +242,57 @@ def test_tracker_reset_forces_a_fresh_baseline():
     tracker.update({"ath0": (100, 100)}, 0.0)
     tracker.reset()
     assert tracker.update({"ath0": (200, 200)}, 10.0) == (None, None)
+
+
+# ------------------------------------ real mca-status capture (Bullet AC IP67)
+#
+# Verbatim from 192.168.1.12 on station-1, firmware 2WA.v8.7.11. The header line
+# packs several pairs onto one line; every other line is one pair. Parsing only
+# on newlines made deviceName swallow the whole header and lose the rest.
+
+REAL_MCA_STATUS = (
+    "deviceName=Bullet AC IP67,deviceId=28:70:4E:E2:9B:CB,"
+    "firmwareVersion=2WA.ar934x.v8.7.11.46972.220614.0419,"
+    "platform=Bullet AC IP67,deviceIp=192.168.1.12\n"
+    "\n"
+    "apMac=00:00:00:00:00:00\n"
+    "wlanOpmode=sta-ptp-ac\n"
+    "wlanConnections=0\n"
+    "wlanUptime=0\n"
+)
+
+
+def test_real_header_line_splits_into_separate_pairs():
+    data = t.parse_mca_status(REAL_MCA_STATUS)
+    assert data["deviceName"] == "Bullet AC IP67"
+    assert data["deviceId"] == "28:70:4E:E2:9B:CB"
+    assert data["firmwareVersion"] == "2WA.ar934x.v8.7.11.46972.220614.0419"
+    assert data["platform"] == "Bullet AC IP67"
+    assert data["deviceIp"] == "192.168.1.12"
+
+
+def test_real_one_pair_per_line_still_parses():
+    data = t.parse_mca_status(REAL_MCA_STATUS)
+    assert data["apMac"] == "00:00:00:00:00:00"
+    assert data["wlanOpmode"] == "sta-ptp-ac"
+    assert data["wlanConnections"] == "0"
+
+
+def test_header_fields_are_not_lost_to_the_first_key():
+    """The bug: deviceName absorbed everything after the first '='."""
+    data = t.parse_mca_status(REAL_MCA_STATUS)
+    assert "," not in data["deviceName"]
+    assert "deviceId=" not in data["deviceName"]
+
+
+def test_comma_inside_a_value_is_preserved():
+    """An SSID may legitimately contain a comma, so only split where a new
+    `key=` actually follows."""
+    data = t.parse_mca_status("essid=Site A, Tower 2\nwlanOpmode=sta\n")
+    assert data["essid"] == "Site A, Tower 2"
+    assert data["wlanOpmode"] == "sta"
+
+
+def test_lines_without_an_equals_are_ignored():
+    data = t.parse_mca_status("banner text\n\ndeviceName=X\n")
+    assert data == {"deviceName": "X"}

@@ -56,12 +56,26 @@ class AirMaxUI(ui.UI):
                 shared_axis=False,
                 active=False,
             ),
+            # Off the shared dB axis: a 0/1 series plotted against dBm would
+            # flatten the signal traces to a straight line.
+            ui.Series(
+                "Device Connected",
+                value=T.online,
+                data_type="boolean",
+                colour=ui.Colour.limegreen,
+                shared_axis=False,
+                active=True,
+            ),
         ],
         position=0,
     )
 
     # ---- at a glance ------------------------------------------------------
-    online = ui.BooleanVariable("Online", value=T.online, name="online", position=1)
+    # `online` is the radio answering its status commands, i.e. the Ubiquiti
+    # device is reachable — not the Doovit's own connectivity.
+    online = ui.BooleanVariable(
+        "Device Connected", value=T.online, name="online", position=1
+    )
 
     # SNR is the headline number: it is what actually predicts whether a link
     # will carry traffic, and unlike raw signal it is meaningful without knowing
@@ -209,8 +223,6 @@ class AirMaxUI(ui.UI):
         children=[
             ui.TextVariable("Model", value=T.model, name="model"),
             ui.TextVariable("Platform", value=T.platform, name="platform"),
-            ui.TextVariable("Firmware", value=T.firmware, name="firmware"),
-            ui.TextVariable("Hostname", value=T.hostname, name="hostname"),
             ui.TextVariable("IP Address", value=T.ip_address, name="ip_address"),
             ui.TextVariable("ESSID", value=T.essid, name="essid"),
             ui.TextVariable("Mode", value=T.wireless_mode, name="wireless_mode"),
@@ -232,25 +244,6 @@ class AirMaxUI(ui.UI):
                 "Radio Uptime", value=T.uptime, name="uptime", units="h", precision=1
             ),
             ui.Timestamp("Radio Booted", value=T.started_at_ms, name="started_at"),
-            ui.Timestamp("Last Seen", value=T.last_seen, name="last_seen"),
-        ],
-    )
-
-    provisioning = ui.Submodule(
-        "Configuration",
-        name="provisioning",
-        position=42,
-        is_collapsed=True,
-        children=[
-            ui.TextVariable("State", value=T.config_state, name="config_state"),
-            ui.TextVariable("Detail", value=T.config_message, name="config_message"),
-            ui.NumericVariable(
-                "Attempts",
-                value=T.config_attempts,
-                name="config_attempts",
-                precision=0,
-            ),
-            ui.TextVariable("Pending Changes", value=T.config_diff, name="config_diff"),
         ],
     )
 

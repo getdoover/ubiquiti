@@ -48,21 +48,49 @@ def as_text(value: Any) -> str | None:
     return text or None
 
 
-def parse_mca_status(text: str) -> dict[str, str]:
-    """Parse flat ``key=value`` status output.
+# A fragment that starts a new pair: an identifier immediately followed by `=`.
+# Used to decide whether a comma inside a line separates pairs or sits inside a
+# value (an SSID may legitimately contain a comma).
+_MCA_PAIR = re.compile(r"^[A-Za-z][A-Za-z0-9_.\-]*=")
 
-    Ignores lines without an ``=`` so banner text or a stray prompt cannot break
-    the read.
+
+def parse_mca_status(text: str) -> dict[str, str]:
+    """Parse ``mca-status`` output into a flat mapping.
+
+    Two shapes appear in the same document, confirmed on a Bullet AC IP67
+    (2WA.v8.7.11): most pairs are one per line, but the **header line packs
+    several onto one line separated by commas**::
+
+        deviceName=Bullet AC IP67,deviceId=28:70:4E:...,firmwareVersion=2WA...
+        apMac=00:00:00:00:00:00
+        wlanOpmode=sta-ptp-ac
+
+    Splitting only on newlines made ``deviceName`` swallow the rest of the header
+    — the hostname tag published as
+    ``"Bullet AC IP67,deviceId=28:70:4E:E2:9B:CB,firmwareVersion=2W..."`` — and
+    silently lost every other field on that line.
+
+    Commas are only treated as separators when what follows looks like a new
+    ``key=`` pair, so a value containing a comma survives intact. Lines without
+    an ``=`` are ignored, so banner text or a stray prompt cannot break the read.
     """
     result: dict[str, str] = {}
     for line in text.splitlines():
         line = line.strip()
         if not line or "=" not in line:
             continue
-        key, _, value = line.partition("=")
-        key = key.strip()
-        if key:
-            result[key] = value.strip()
+        # Rebuild pairs, re-joining fragments that were not a new key=value.
+        pairs: list[str] = []
+        for fragment in line.split(","):
+            if pairs and not _MCA_PAIR.match(fragment):
+                pairs[-1] += "," + fragment
+            else:
+                pairs.append(fragment)
+        for pair in pairs:
+            key, sep, value = pair.partition("=")
+            key = key.strip()
+            if sep and key:
+                result[key] = value.strip()
     return result
 
 

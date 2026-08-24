@@ -16,6 +16,514 @@
         "export_ui_command": "export-ui-airmax",
         "run_command": "doover-app-run-airmax",
         "lambda_config": {},
-        "key": "5b928db3-cb2e-49a7-b7da-9d4d98da3350"
+        "key": "5b928db3-cb2e-49a7-b7da-9d4d98da3350",
+        "ui_schema": {
+            "displayString": "$config.app().APP_DISPLAY_NAME",
+            "hidden": "$config.app().interpreter_hidden:boolean:false",
+            "fullWidth": "$config.app().interpreter_full_width:boolean:false",
+            "position": "$config.app().dv_app_position:number:100",
+            "icon": null,
+            "colour": null,
+            "defaultOpen": "$config.app().dv_app_default_open:boolean",
+            "type": "uiApplication",
+            "name": "$config.app().APP_KEY",
+            "children": {
+                "history": {
+                    "name": "history",
+                    "type": "uiMultiPlot",
+                    "displayString": "Link History",
+                    "showActivity": true,
+                    "position": 0,
+                    "hidden": false,
+                    "series": {
+                        "snr": {
+                            "name": "snr",
+                            "displayString": "SNR",
+                            "dataType": "unknown",
+                            "lookup": "$tag.app().snr:number:null",
+                            "active": true,
+                            "colour": "green",
+                            "units": "dB",
+                            "live": true
+                        },
+                        "signal": {
+                            "name": "signal",
+                            "displayString": "Signal",
+                            "dataType": "unknown",
+                            "lookup": "$tag.app().signal:number:null",
+                            "active": true,
+                            "colour": "blue",
+                            "units": "dBm",
+                            "live": true
+                        },
+                        "noise_floor": {
+                            "name": "noise_floor",
+                            "displayString": "Noise Floor",
+                            "dataType": "unknown",
+                            "lookup": "$tag.app().noise_floor:number:null",
+                            "active": false,
+                            "colour": "grey",
+                            "units": "dBm",
+                            "live": true
+                        },
+                        "airmax_ccq": {
+                            "name": "airmax_ccq",
+                            "displayString": "airMAX CCQ",
+                            "dataType": "unknown",
+                            "lookup": "$tag.app().ccq:number:null",
+                            "active": false,
+                            "colour": "orange",
+                            "sharedAxis": false,
+                            "units": "%",
+                            "live": true
+                        },
+                        "rx_throughput": {
+                            "name": "rx_throughput",
+                            "displayString": "RX Throughput",
+                            "dataType": "unknown",
+                            "lookup": "$tag.app().rx_throughput:number:null",
+                            "active": false,
+                            "colour": "purple",
+                            "sharedAxis": false,
+                            "units": "kbps",
+                            "live": true
+                        },
+                        "device_connected": {
+                            "name": "device_connected",
+                            "displayString": "Device Connected",
+                            "dataType": "boolean",
+                            "lookup": "$tag.app().online:boolean:false",
+                            "active": true,
+                            "colour": "limegreen",
+                            "sharedAxis": false,
+                            "live": true
+                        }
+                    },
+                    "title": "Link History"
+                },
+                "online": {
+                    "name": "online",
+                    "type": "uiVariable",
+                    "displayString": "Device Connected",
+                    "showActivity": true,
+                    "position": 1,
+                    "hidden": false,
+                    "varType": "bool",
+                    "currentValue": "$tag.app().online:boolean:false",
+                    "live": true
+                },
+                "snr": {
+                    "name": "snr",
+                    "type": "uiVariable",
+                    "displayString": "Signal / Noise",
+                    "showActivity": true,
+                    "form": "radialGauge",
+                    "position": 2,
+                    "hidden": false,
+                    "units": "dB",
+                    "varType": "float",
+                    "currentValue": "$tag.app().snr:number:null",
+                    "decPrecision": 0,
+                    "ranges": [
+                        {
+                            "min": 0,
+                            "max": 10,
+                            "colour": "red",
+                            "show_on_graph": true,
+                            "label": "Unusable"
+                        },
+                        {
+                            "min": 10,
+                            "max": 20,
+                            "colour": "yellow",
+                            "show_on_graph": true,
+                            "label": "Marginal"
+                        },
+                        {
+                            "min": 20,
+                            "max": 30,
+                            "colour": "blue",
+                            "show_on_graph": true,
+                            "label": "Good"
+                        },
+                        {
+                            "min": 30,
+                            "max": 60,
+                            "colour": "green",
+                            "show_on_graph": true,
+                            "label": "Excellent"
+                        }
+                    ],
+                    "live": true
+                },
+                "unreachable_warning": {
+                    "name": "unreachable_warning",
+                    "type": "uiWarningIndicator",
+                    "displayString": "Radio not reachable",
+                    "position": 20,
+                    "hidden": "$tag.app().reachable_ok:boolean:true",
+                    "currentValue": "$cmds.app().unreachable_warning",
+                    "can_cancel": true
+                },
+                "config_warning": {
+                    "name": "config_warning",
+                    "type": "uiWarningIndicator",
+                    "displayString": "Config could not be applied \u2014 needs attention",
+                    "position": 21,
+                    "hidden": "$tag.app().config_ok:boolean:true",
+                    "currentValue": "$cmds.app().config_warning",
+                    "can_cancel": true
+                },
+                "link": {
+                    "name": "link",
+                    "type": "uiSubmodule",
+                    "displayString": "Link Quality",
+                    "showActivity": true,
+                    "position": 30,
+                    "hidden": false,
+                    "children": {
+                        "signal": {
+                            "name": "signal",
+                            "type": "uiVariable",
+                            "displayString": "Signal",
+                            "showActivity": true,
+                            "position": 56,
+                            "hidden": false,
+                            "units": "dBm",
+                            "varType": "float",
+                            "currentValue": "$tag.app().signal:number:null",
+                            "decPrecision": 0,
+                            "ranges": [
+                                {
+                                    "min": -100,
+                                    "max": -80,
+                                    "colour": "red",
+                                    "show_on_graph": true,
+                                    "label": "Weak"
+                                },
+                                {
+                                    "min": -80,
+                                    "max": -70,
+                                    "colour": "yellow",
+                                    "show_on_graph": true,
+                                    "label": "Fair"
+                                },
+                                {
+                                    "min": -70,
+                                    "max": -50,
+                                    "colour": "green",
+                                    "show_on_graph": true,
+                                    "label": "Good"
+                                },
+                                {
+                                    "min": -50,
+                                    "max": 0,
+                                    "colour": "yellow",
+                                    "show_on_graph": true,
+                                    "label": "Hot"
+                                }
+                            ],
+                            "live": true
+                        },
+                        "noise_floor": {
+                            "name": "noise_floor",
+                            "type": "uiVariable",
+                            "displayString": "Noise Floor",
+                            "showActivity": true,
+                            "position": 57,
+                            "hidden": false,
+                            "units": "dBm",
+                            "varType": "float",
+                            "currentValue": "$tag.app().noise_floor:number:null",
+                            "decPrecision": 0,
+                            "live": true
+                        },
+                        "ccq": {
+                            "name": "ccq",
+                            "type": "uiVariable",
+                            "displayString": "airMAX CCQ",
+                            "showActivity": true,
+                            "position": 58,
+                            "hidden": false,
+                            "units": "%",
+                            "varType": "float",
+                            "currentValue": "$tag.app().ccq:number:null",
+                            "decPrecision": 0,
+                            "ranges": [
+                                {
+                                    "min": 0,
+                                    "max": 60,
+                                    "colour": "red",
+                                    "show_on_graph": true,
+                                    "label": "Poor"
+                                },
+                                {
+                                    "min": 60,
+                                    "max": 85,
+                                    "colour": "yellow",
+                                    "show_on_graph": true,
+                                    "label": "Fair"
+                                },
+                                {
+                                    "min": 85,
+                                    "max": 100,
+                                    "colour": "green",
+                                    "show_on_graph": true,
+                                    "label": "Good"
+                                }
+                            ],
+                            "live": true
+                        },
+                        "quality": {
+                            "name": "quality",
+                            "type": "uiVariable",
+                            "displayString": "airMAX Quality",
+                            "showActivity": true,
+                            "position": 59,
+                            "hidden": false,
+                            "units": "%",
+                            "varType": "float",
+                            "currentValue": "$tag.app().quality:number:null",
+                            "decPrecision": 0
+                        },
+                        "capacity": {
+                            "name": "capacity",
+                            "type": "uiVariable",
+                            "displayString": "airMAX Capacity",
+                            "showActivity": true,
+                            "position": 60,
+                            "hidden": false,
+                            "units": "%",
+                            "varType": "float",
+                            "currentValue": "$tag.app().capacity:number:null",
+                            "decPrecision": 0
+                        }
+                    }
+                },
+                "throughput": {
+                    "name": "throughput",
+                    "type": "uiSubmodule",
+                    "displayString": "Rates & Throughput",
+                    "showActivity": true,
+                    "position": 31,
+                    "hidden": false,
+                    "children": {
+                        "tx_rate": {
+                            "name": "tx_rate",
+                            "type": "uiVariable",
+                            "displayString": "TX Rate",
+                            "showActivity": true,
+                            "position": 62,
+                            "hidden": false,
+                            "units": "Mbps",
+                            "varType": "float",
+                            "currentValue": "$tag.app().tx_rate:number:null",
+                            "decPrecision": 0,
+                            "live": true
+                        },
+                        "rx_rate": {
+                            "name": "rx_rate",
+                            "type": "uiVariable",
+                            "displayString": "RX Rate",
+                            "showActivity": true,
+                            "position": 63,
+                            "hidden": false,
+                            "units": "Mbps",
+                            "varType": "float",
+                            "currentValue": "$tag.app().rx_rate:number:null",
+                            "decPrecision": 0,
+                            "live": true
+                        },
+                        "tx_throughput": {
+                            "name": "tx_throughput",
+                            "type": "uiVariable",
+                            "displayString": "TX Throughput",
+                            "showActivity": true,
+                            "position": 64,
+                            "hidden": false,
+                            "units": "kbps",
+                            "varType": "float",
+                            "currentValue": "$tag.app().tx_throughput:number:null",
+                            "decPrecision": 0,
+                            "live": true
+                        },
+                        "rx_throughput": {
+                            "name": "rx_throughput",
+                            "type": "uiVariable",
+                            "displayString": "RX Throughput",
+                            "showActivity": true,
+                            "position": 65,
+                            "hidden": false,
+                            "units": "kbps",
+                            "varType": "float",
+                            "currentValue": "$tag.app().rx_throughput:number:null",
+                            "decPrecision": 0,
+                            "live": true
+                        }
+                    }
+                },
+                "peers": {
+                    "name": "peers",
+                    "type": "uiSubmodule",
+                    "displayString": "Peers",
+                    "showActivity": true,
+                    "position": 40,
+                    "hidden": false,
+                    "children": {
+                        "station_count": {
+                            "name": "station_count",
+                            "type": "uiVariable",
+                            "displayString": "Stations Connected",
+                            "showActivity": true,
+                            "position": 67,
+                            "hidden": false,
+                            "varType": "float",
+                            "currentValue": "$tag.app().station_count:number:null",
+                            "decPrecision": 0
+                        },
+                        "stations": {
+                            "name": "stations",
+                            "type": "uiVariable",
+                            "displayString": "Stations",
+                            "showActivity": true,
+                            "position": 68,
+                            "hidden": false,
+                            "varType": "string",
+                            "currentValue": "$tag.app().stations:string:null"
+                        },
+                        "ap_mac": {
+                            "name": "ap_mac",
+                            "type": "uiVariable",
+                            "displayString": "AP MAC",
+                            "showActivity": true,
+                            "position": 69,
+                            "hidden": false,
+                            "varType": "string",
+                            "currentValue": "$tag.app().ap_mac:string:null"
+                        },
+                        "distance": {
+                            "name": "distance",
+                            "type": "uiVariable",
+                            "displayString": "Distance",
+                            "showActivity": true,
+                            "position": 70,
+                            "hidden": false,
+                            "units": "m",
+                            "varType": "float",
+                            "currentValue": "$tag.app().distance:number:null",
+                            "decPrecision": 0
+                        }
+                    },
+                    "defaultOpen": false
+                },
+                "device": {
+                    "name": "device",
+                    "type": "uiSubmodule",
+                    "displayString": "Device",
+                    "showActivity": true,
+                    "position": 41,
+                    "hidden": false,
+                    "children": {
+                        "model": {
+                            "name": "model",
+                            "type": "uiVariable",
+                            "displayString": "Model",
+                            "showActivity": true,
+                            "position": 72,
+                            "hidden": false,
+                            "varType": "string",
+                            "currentValue": "$tag.app().model:string:null"
+                        },
+                        "platform": {
+                            "name": "platform",
+                            "type": "uiVariable",
+                            "displayString": "Platform",
+                            "showActivity": true,
+                            "position": 73,
+                            "hidden": false,
+                            "varType": "string",
+                            "currentValue": "$tag.app().platform:string:null"
+                        },
+                        "ip_address": {
+                            "name": "ip_address",
+                            "type": "uiVariable",
+                            "displayString": "IP Address",
+                            "showActivity": true,
+                            "position": 74,
+                            "hidden": false,
+                            "varType": "string",
+                            "currentValue": "$tag.app().ip_address:string:null"
+                        },
+                        "essid": {
+                            "name": "essid",
+                            "type": "uiVariable",
+                            "displayString": "ESSID",
+                            "showActivity": true,
+                            "position": 75,
+                            "hidden": false,
+                            "varType": "string",
+                            "currentValue": "$tag.app().essid:string:null"
+                        },
+                        "wireless_mode": {
+                            "name": "wireless_mode",
+                            "type": "uiVariable",
+                            "displayString": "Mode",
+                            "showActivity": true,
+                            "position": 76,
+                            "hidden": false,
+                            "varType": "string",
+                            "currentValue": "$tag.app().wireless_mode:string:null"
+                        },
+                        "frequency": {
+                            "name": "frequency",
+                            "type": "uiVariable",
+                            "displayString": "Frequency",
+                            "showActivity": true,
+                            "position": 77,
+                            "hidden": false,
+                            "units": "MHz",
+                            "varType": "float",
+                            "currentValue": "$tag.app().frequency:number:null",
+                            "decPrecision": 0
+                        },
+                        "channel_width": {
+                            "name": "channel_width",
+                            "type": "uiVariable",
+                            "displayString": "Channel Width",
+                            "showActivity": true,
+                            "position": 78,
+                            "hidden": false,
+                            "units": "MHz",
+                            "varType": "float",
+                            "currentValue": "$tag.app().channel_width:number:null",
+                            "decPrecision": 0
+                        },
+                        "uptime": {
+                            "name": "uptime",
+                            "type": "uiVariable",
+                            "displayString": "Radio Uptime",
+                            "showActivity": true,
+                            "position": 79,
+                            "hidden": false,
+                            "units": "h",
+                            "varType": "float",
+                            "currentValue": "$tag.app().uptime:number:null",
+                            "decPrecision": 1
+                        },
+                        "started_at": {
+                            "name": "started_at",
+                            "type": "uiTimestamp",
+                            "displayString": "Radio Booted",
+                            "showActivity": true,
+                            "position": 80,
+                            "hidden": false,
+                            "varType": "timestamp",
+                            "currentValue": "$tag.app().started_at_ms:number:null"
+                        }
+                    },
+                    "defaultOpen": false
+                }
+            }
+        }
     }
 }

@@ -91,6 +91,9 @@ def make(overrides=None, expected_model="", **settings_kwargs):
     settings_kwargs.setdefault("manage_addresses", False)
     settings_kwargs.setdefault("retry_backoff", 0)
     settings_kwargs.setdefault("reboot_wait", 0)
+    # Off by default here so the write path is exercised; the delay has its own
+    # tests below.
+    settings_kwargs.setdefault("deployment_delay", 0)
     settings_kwargs.setdefault("credentials", [Credential("admin", "pw")])
     p = prov.Provisioner(prov.Settings(**settings_kwargs))
     p.load(
@@ -536,3 +539,85 @@ async def test_address_holder_swaps_when_the_radio_moves(monkeypatch):
     await holder.ensure("eth0", "10.4.5.6")
     assert added == ["192.168.1.254/24", "10.4.5.254/24"]
     assert removed == ["192.168.1.254/24"], "old address must be dropped"
+
+
+# ------------------------------------------------------------- deployment delay
+#
+# A fleet-wide deploy must be able to reach every radio before any link drops:
+# on a chained network, reconfiguring an uplink first cuts off the stations that
+# have not received their config yet.
+
+
+async def test_delay_holds_the_write_and_reports_the_wait(radio):
+    p = make(deployment_delay=300)
+    result = await p.run_pass([device()])
+    assert p.state is TargetState.DRIFTED
+    assert radio.writes == 0
+    assert "holding" in result
+    assert "holding" in p.record.message
+
+
+async def test_delay_does_not_consume_an_attempt(radio):
+    """Waiting is not a failed try — otherwise a long delay would exhaust the
+    attempt ceiling before ever touching the radio."""
+    p = make(deployment_delay=300)
+    for _ in range(5):
+        await p.run_pass([device()])
+    assert p.record.attempts == 0
+    assert p.state is TargetState.DRIFTED
+
+
+async def test_write_proceeds_once_the_delay_has_elapsed(radio):
+    p = make(deployment_delay=300)
+    await p.run_pass([device()])
+    assert radio.writes == 0
+
+    p.record.intent_since -= 400  # delay window has passed
+    await p.run_pass([device()])
+    assert p.state is TargetState.APPLYING
+    assert radio.writes == 1
+
+
+async def test_telemetry_and_diff_still_publish_while_holding(radio):
+    """The whole point: the operator watches the links stay up and sees what is
+    pending, while nothing is written yet."""
+    p = make(deployment_delay=300)
+    await p.run_pass([device()])
+    assert p.telemetry.online is True
+    assert "radio.1.freq" in p.record.last_diff
+    assert radio.writes == 0
+
+
+async def test_zero_delay_applies_immediately(radio):
+    p = make(deployment_delay=0)
+    await p.run_pass([device()])
+    assert p.state is TargetState.APPLYING
+    assert radio.writes == 1
+
+
+async def test_dry_run_wins_over_the_delay(radio):
+    """Dry run is the stronger statement — no need to wait to write nothing."""
+    p = make(dry_run=True, deployment_delay=300)
+    await p.run_pass([device()])
+    assert p.state is TargetState.WOULD_APPLY
+    assert radio.writes == 0
+
+
+async def test_converged_radio_is_not_held(radio):
+    """Nothing to apply means nothing to wait for."""
+    p = make(overrides=[prov.Override("radio.1.freq", "0")], deployment_delay=300)
+    await p.run_pass([device()])
+    assert p.state is TargetState.CONVERGED
+
+
+async def test_editing_the_config_restarts_the_delay(radio):
+    """A live config edit must re-arm the window, not just a container restart —
+    otherwise a mid-flight edit applies instantly on the next pass."""
+    p = make(deployment_delay=300)
+    await p.run_pass([device()])
+    p.record.intent_since -= 400  # window elapsed for the old intent
+
+    p.load(prov.TargetSpec(mac=MAC, overrides=[prov.Override("radio.1.freq", "5200")]))
+    await p.run_pass([device()])
+    assert radio.writes == 0, "new intent must serve a fresh delay"
+    assert p.state is TargetState.DRIFTED

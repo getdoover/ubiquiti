@@ -81,6 +81,7 @@ class AirMaxApplication(Application):
         return Settings(
             interface=self.config.interface.value,
             dry_run=self.config.dry_run.value,
+            deployment_delay=self.config.deployment_delay.value,
             max_attempts=self.config.max_attempts.value,
             retry_backoff=self.config.retry_backoff.value,
             failed_retry_after=self.config.failed_retry_after.value,

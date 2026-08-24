@@ -74,6 +74,21 @@ class AirMaxConfig(config.Schema):
         ),
     )
 
+    deployment_delay = config.Integer(
+        "Deployment Delay",
+        name="deployment_delay",
+        default=30,
+        minimum=0,
+        description=(
+            "Seconds to wait before applying a new config, measured from when this "
+            "install received it. The app still discovers, reads telemetry and "
+            "reports the pending diff during the wait — it just holds the write. "
+            "Lets a whole network be updated and deployed together: every radio "
+            "receives its config while the links are still up, then they all apply. "
+            "0 applies immediately."
+        ),
+    )
+
     # -------------------------------------------------------------- the radio
     mac = config.String(
         "MAC Address",

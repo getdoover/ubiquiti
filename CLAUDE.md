@@ -48,6 +48,13 @@ convergence is a background concern that reports its state.
 - **Overlay, never whole-file.** Overrides are a list of `{key, value}`, not a
   `system.cfg`. Read `/tmp/running.cfg`, apply those keys, write back. Never ship
   a complete config; it drops model-specific keys.
+- **Deployment Delay holds the first write of a new intent.** Measured from
+  `TargetRecord.intent_since` — set on a fresh record (redeploy) *and* on a
+  fingerprint change (live config edit) — so a fleet-wide deploy reaches every
+  radio before any link drops. On a chained network, reconfiguring an uplink first
+  cuts off stations that have not received their config yet. Checked after dry run
+  and **before** the attempt ceiling: waiting must never consume an attempt.
+  Telemetry and the pending diff keep publishing throughout.
 - **Two override layers, on purpose.** `profile_overrides` (shared, bottom of the
   form) and `overrides` (per-install). They are separate config keys because
   Doover's `deep_merge` *replaces* arrays rather than combining them — a config

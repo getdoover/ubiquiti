@@ -100,6 +100,7 @@ def intent_fingerprint(overrides: list[Override]) -> str:
 class Settings:
     interface: str = "eth0"
     dry_run: bool = True
+    deployment_delay: int = 30
     max_attempts: int = 3
     retry_backoff: int = 300
     failed_retry_after: int = 3600
@@ -156,7 +157,10 @@ class Provisioner:
             # New intent from the operator: clear the attempt count so an edited
             # config gets a fresh set of tries even from a parked state.
             self.record.reset("config changed, retrying")
+            self.record.intent_since = None
         self.record.intent = fingerprint
+        if self.record.intent_since is None:
+            self.record.intent_since = time.time()
 
     # ------------------------------------------------------------------ status
     @property
@@ -313,6 +317,21 @@ class Provisioner:
                     f"dry run — {len(changes)} key(s) would change",
                 )
                 return f"dry run, {len(changes)} key(s) would change"
+
+            # Hold before the first write of a new intent, so a fleet-wide
+            # deploy can reach every radio before any link drops. Checked
+            # after dry run and before the attempt ceiling: waiting must not
+            # consume an attempt. Telemetry and the diff keep publishing
+            # throughout, which is the point — the operator watches the links
+            # stay up while the config propagates.
+            held = record.hold_remaining(settings.deployment_delay)
+            if held > 0:
+                record.transition(
+                    TargetState.DRIFTED,
+                    f"{len(changes)} key(s) to apply — holding {held:.0f}s "
+                    f"for the deployment delay",
+                )
+                return f"holding {held:.0f}s before applying"
 
             if record.attempts >= settings.max_attempts:
                 record.transition(

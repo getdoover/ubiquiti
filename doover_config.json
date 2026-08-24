@@ -544,6 +544,20 @@
                     "default": false,
                     "x-position": 0
                 },
+                "deployment_delay": {
+                    "title": "Deployment Delay",
+                    "x-name": "deployment_delay",
+                    "x-hidden": false,
+                    "type": [
+                        "integer",
+                        "null"
+                    ],
+                    "x-required": false,
+                    "description": "Seconds to wait before applying a new config, measured from when this install received it. The app still discovers, reads telemetry and reports the pending diff during the wait \u2014 it just holds the write. Lets a whole network be updated and deployed together: every radio receives its config while the links are still up, then they all apply. 0 applies immediately.",
+                    "default": 30,
+                    "x-position": 1,
+                    "minimum": 0
+                },
                 "mac": {
                     "title": "MAC Address",
                     "x-name": "mac",
@@ -551,7 +565,7 @@
                     "type": "string",
                     "x-required": true,
                     "description": "The radio this install manages. Accepts 04:18:D6:AA:BB:CC, 04-18-d6-aa-bb-cc or 0418d6aabbcc. You can also paste the whole string from the device label (e.g. 2450BJ28704EE29BCB) \u2014 Ubiquiti prefixes the MAC with a batch code, and the last 12 hex digits are taken. Run 'airos discover' to read it off the radio directly.",
-                    "x-position": 1
+                    "x-position": 2
                 },
                 "expected_model": {
                     "title": "Expected Model",
@@ -564,7 +578,7 @@
                     "x-required": false,
                     "description": "Optional. Provisioning is refused unless the discovered model contains this string \u2014 a guard against a MAC typo hitting a real radio.",
                     "default": "",
-                    "x-position": 2
+                    "x-position": 3
                 },
                 "overrides": {
                     "title": "Config Overrides",
@@ -577,7 +591,7 @@
                     "x-required": false,
                     "description": "The airOS keys to set for THIS radio. Everything else on the radio is left alone. Applied on top of Profile Overrides, so a key set here wins. Leave both empty to run as telemetry-only.",
                     "default": [],
-                    "x-position": 3,
+                    "x-position": 4,
                     "items": {
                         "title": "Override",
                         "x-name": "override",
@@ -627,7 +641,7 @@
                     "x-required": false,
                     "description": "After this many failed pushes the radio is parked and left alone. This is what stops a config that never converges becoming a reboot loop.",
                     "default": 3,
-                    "x-position": 4,
+                    "x-position": 5,
                     "minimum": 1,
                     "maximum": 20
                 },
@@ -642,7 +656,7 @@
                     "x-required": false,
                     "description": "Minimum wait before retrying after a failed attempt.",
                     "default": 300,
-                    "x-position": 5,
+                    "x-position": 6,
                     "minimum": 10
                 },
                 "failed_retry_after": {
@@ -656,7 +670,7 @@
                     "x-required": false,
                     "description": "How long a parked radio waits before trying again, so a transient failure heals itself. 0 means never retry. Editing the overrides or variables also clears a parked radio immediately.",
                     "default": 3600,
-                    "x-position": 6,
+                    "x-position": 7,
                     "minimum": 0
                 },
                 "interface": {
@@ -670,7 +684,7 @@
                     "x-required": false,
                     "description": "LAN interface to discover and provision on. MUST NOT be the interface carrying this device's default route \u2014 the app refuses to start if it is.",
                     "default": "eth0",
-                    "x-position": 7
+                    "x-position": 8
                 },
                 "manage_addresses": {
                     "title": "Manage Interface Addresses",
@@ -683,7 +697,7 @@
                     "x-required": false,
                     "description": "Temporarily add a secondary address so a factory radio on 192.168.1.20 is reachable from another subnet. Needs NET_ADMIN. Removed again after each attempt.",
                     "default": true,
-                    "x-position": 8
+                    "x-position": 9
                 },
                 "poll_interval": {
                     "title": "Poll Interval (s)",
@@ -696,7 +710,7 @@
                     "x-required": false,
                     "description": "How often to sweep for the radio and read its telemetry. Also the resolution of the graphs in the UI.",
                     "default": 30,
-                    "x-position": 9,
+                    "x-position": 10,
                     "minimum": 5
                 },
                 "discovery_timeout": {
@@ -710,7 +724,7 @@
                     "x-required": false,
                     "description": "How long to listen for discovery replies each sweep.",
                     "default": 3.0,
-                    "x-position": 10
+                    "x-position": 11
                 },
                 "reboot_wait": {
                     "title": "Reboot Wait (s)",
@@ -723,7 +737,7 @@
                     "x-required": false,
                     "description": "How long to wait for the radio to come back after a reboot before verifying. It returns on its NEW address, which discovery re-finds.",
                     "default": 120,
-                    "x-position": 11,
+                    "x-position": 12,
                     "minimum": 30
                 },
                 "ssh_port": {
@@ -736,7 +750,7 @@
                     ],
                     "x-required": false,
                     "default": 22,
-                    "x-position": 12
+                    "x-position": 13
                 },
                 "credentials": {
                     "title": "Credentials",
@@ -755,7 +769,7 @@
                             "label": "factory default"
                         }
                     ],
-                    "x-position": 13,
+                    "x-position": 14,
                     "items": {
                         "title": "Credential",
                         "x-name": "credential",
@@ -818,7 +832,7 @@
                     "x-required": false,
                     "description": "Exactly the same as Config Overrides \u2014 airOS keys to set \u2014 but kept as a separate list so a Doover config profile can supply a shared layer without overwriting the per-install one. Put settings common to every radio of this role here (mode, SSID, PSK, frequency, country) and per-radio settings in Config Overrides, which are applied afterwards and win on any key set in both.",
                     "default": [],
-                    "x-position": 14,
+                    "x-position": 15,
                     "items": {
                         "title": "Profile Override",
                         "x-name": "profile_override",

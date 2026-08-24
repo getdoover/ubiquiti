@@ -45,6 +45,11 @@ class TargetRecord:
     #: expressed new intent, so the attempt count is cleared and a parked target
     #: gets to try again — this is what replaces the old Reset Failed button.
     intent: str = ""
+    #: When the current intent was first seen — a fresh record (container start)
+    #: or a changed fingerprint (operator edited the config). The deployment delay
+    #: is measured from here, so a fleet-wide deploy holds every radio for the same
+    #: window whether the new config arrived by restart or by live update.
+    intent_since: float | None = None
     ip: str | None = None
     model: str | None = None
     platform: str | None = None
@@ -71,6 +76,17 @@ class TargetRecord:
     def record_attempt(self) -> None:
         self.attempts += 1
         self.last_attempt = time.time()
+
+    def hold_remaining(self, delay_seconds: float) -> float:
+        """Seconds left of the deployment delay for the current intent.
+
+        ``0`` means clear to write. Measured from :attr:`intent_since` rather than
+        process start, so it covers both ways a new config arrives: a redeploy
+        (fresh record) and a live config edit (changed fingerprint).
+        """
+        if delay_seconds <= 0 or self.intent_since is None:
+            return 0.0
+        return max(0.0, delay_seconds - (time.time() - self.intent_since))
 
     def backoff_remaining(self, backoff_seconds: float) -> float:
         """Seconds until this target may be retried. ``0`` means now."""

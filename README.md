@@ -105,6 +105,7 @@ the reset button — so the defaults are conservative:
 |---------|---------|--------|
 | **Dry Run** | on | Diff and report; never write. Telemetry still works. |
 | **Max Attempts** | 3 | A radio that never converges is parked instead of rebooting forever. |
+| **Deployment Delay** | 30 s | Holds the first write of a new config so a whole network can be updated and deployed together, then apply at once. Telemetry and the pending diff keep reporting while it waits. 0 = immediate. |
 | **Failed Retry After** | 1 h | A parked radio retries once, later, so transient failures self-heal. 0 = never. |
 | Expected Model | optional | Refuses to provision unless the discovered model matches — catches a MAC typo. |
 | Interface guard | — | Refuses to add a helper address to the interface carrying the default route (warns at startup if shared). |

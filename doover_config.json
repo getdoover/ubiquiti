@@ -42,7 +42,7 @@
                             "dataType": "unknown",
                             "lookup": "$tag.app().snr:number:null",
                             "active": true,
-                            "colour": "green",
+                            "colour": "red",
                             "units": "dB",
                             "live": true
                         },
@@ -93,7 +93,7 @@
                             "displayString": "Device Connected",
                             "dataType": "boolean",
                             "lookup": "$tag.app().online:boolean:false",
-                            "active": true,
+                            "active": false,
                             "colour": "limegreen",
                             "sharedAxis": false,
                             "live": true

@@ -24,7 +24,7 @@ class AirMaxUI(ui.UI):
         name="history",
         series=[
             ui.Series(
-                "SNR", value=T.snr, units="dB", colour=ui.Colour.green, active=True
+                "SNR", value=T.snr, units="dB", colour=ui.Colour.red, active=True
             ),
             ui.Series(
                 "Signal",
@@ -64,7 +64,7 @@ class AirMaxUI(ui.UI):
                 data_type="boolean",
                 colour=ui.Colour.limegreen,
                 shared_axis=False,
-                active=True,
+                active=False,
             ),
         ],
         position=0,

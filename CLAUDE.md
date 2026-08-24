@@ -48,6 +48,14 @@ convergence is a background concern that reports its state.
 - **Overlay, never whole-file.** Overrides are a list of `{key, value}`, not a
   `system.cfg`. Read `/tmp/running.cfg`, apply those keys, write back. Never ship
   a complete config; it drops model-specific keys.
+- **Two override layers, on purpose.** `profile_overrides` (shared, bottom of the
+  form) and `overrides` (per-install). They are separate config keys because
+  Doover's `deep_merge` *replaces* arrays rather than combining them — a config
+  profile writing `overrides` would silently wipe the per-install list. The app
+  concatenates them profile-first in `_layered_overrides()`, so a key in both
+  takes the per-install value. Pinned by
+  `test_install_overrides_win_over_profile_overrides` and
+  `test_both_override_layers_exist_as_separate_keys`.
 - **Override values are literal.** `build_overlay` does no templating: one install
   manages one radio, so there is nothing to parameterise. It validates keys
   against `_VALID_KEY` and **refuses any value containing `{{` or `}}`** — nothing

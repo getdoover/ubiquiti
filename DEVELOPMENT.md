@@ -142,6 +142,22 @@ No CI change is needed — confirm the new app shows up in
   *class* level; assigning them in `__init__` silently exports an empty schema.
   Structured array items are `config.Object` subclasses with explicit `name=` on
   every field, so the JSON keys stay stable and readable.
-- **Verification exclusions.** Keys the device rewrites (password hashes,
-  obscured PSKs) can never compare equal to what was pushed. They belong in
-  Verify Exclude Keys, or the target never converges.
+- **The number on a Ubiquiti label is not a MAC.** It is a batch code followed by
+  the MAC: a real Bullet AC IP67 shipped as `2450BJ28704EE29BCB`, whose last 12
+  hex digits are `28:70:4e:e2:9b:cb`. `normalise_mac` strips non-hex and keeps the
+  trailing 12, so operators can paste the label as-is. Truncation is logged, since
+  a typo that lengthens the input silently targets a different radio.
+- **No verification exclusions.** Every override is both compared and written.
+  An earlier exclusion list applied to `diff` but not `merge`, which let a key be
+  written to a radio without ever being checked — so drift on it was invisible. If
+  a key should not be managed, leave it out of the overrides. A key that genuinely
+  cannot converge is bounded by `max_attempts` and parks with the offending keys
+  named.
+- **`0000:0000` is airOS's *unset* PSK value, not a mask.** It appears verbatim in
+  the factory image config (`/usr/etc/system.cfg`), so a real PSK written to that
+  key should read back verbatim. An override of `0000:0000` is a no-op that looks
+  like you are managing the key — write a real value or omit it.
+- **A station's PSK is not `aaa.1.wpa.psk`.** In `radio.1.mode=managed` the key in
+  play is `wpasupplicant.profile.1.network.1.psk` (with
+  `wireless.1.security.type` and `...key_mgmt.1.name`). `aaa.1.wpa.psk` is the
+  AP-side key and is inert on a station.

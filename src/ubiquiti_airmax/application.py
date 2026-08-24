@@ -88,7 +88,6 @@ class AirMaxApplication(Application):
             discovery_timeout=self.config.discovery_timeout.value,
             ssh_port=self.config.ssh_port.value,
             manage_addresses=self.config.manage_addresses.value,
-            verify_exclude=tuple(p.value for p in self.config.verify_exclude.elements),
             credentials=credentials or [Credential("ubnt", "ubnt")],
         )
 
@@ -107,13 +106,34 @@ class AirMaxApplication(Application):
         self.provisioner.load(
             TargetSpec(
                 mac=mac,
-                overrides=[
-                    Override(key=o.key.value, value=o.val.value)
-                    for o in self.config.overrides.elements
-                ],
+                overrides=self._layered_overrides(),
                 expected_model=self.config.expected_model.value,
             )
         )
+
+    def _layered_overrides(self) -> list[Override]:
+        """Profile layer first, per-install layer second.
+
+        Order is the precedence: :func:`build_overlay` fills a dict, so a key
+        present in both layers takes the per-install value. That is the point of
+        the split — a profile states the shared intent for a role, and one install
+        can deviate without editing the profile.
+        """
+        profile = [
+            Override(key=o.key.value, value=o.val.value)
+            for o in self.config.profile_overrides.elements
+        ]
+        install = [
+            Override(key=o.key.value, value=o.val.value)
+            for o in self.config.overrides.elements
+        ]
+        shadowed = {o.key.strip() for o in profile} & {o.key.strip() for o in install}
+        if shadowed:
+            log.info(
+                "per-install overrides take precedence for: %s",
+                ", ".join(sorted(shadowed)),
+            )
+        return profile + install
 
     # ------------------------------------------------------------- main loop
     async def main_loop(self):

@@ -58,7 +58,20 @@ it has already decided about.
 reads the radio's live `/tmp/running.cfg`, applies only those keys, and writes it
 back, so everything model- and firmware-specific (chain counts, calibration,
 per-platform defaults) is preserved. Values are **literal** — one install manages
-one radio, so there is nothing to parameterise:
+one radio, so there is nothing to parameterise.
+
+Overrides come in two layers, applied in order:
+
+| Layer | Field | Owned by | Holds |
+|---|---|---|---|
+| 1 | **Profile Overrides** | a Doover config profile | settings shared by every radio of a role — mode, SSID, PSK, frequency, country |
+| 2 | **Config Overrides** | the individual install | settings for this radio only — applied second, so it wins on any shared key |
+
+They are separate fields rather than one list because Doover's config merge
+*replaces* arrays instead of combining them: a profile writing `overrides` would
+wipe the install's list. Two keys merge cleanly.
+
+An example of each:
 
 | Override | Value |
 |---|---|
@@ -94,13 +107,17 @@ the reset button — so the defaults are conservative:
 | **Max Attempts** | 3 | A radio that never converges is parked instead of rebooting forever. |
 | **Failed Retry After** | 1 h | A parked radio retries once, later, so transient failures self-heal. 0 = never. |
 | Expected Model | optional | Refuses to provision unless the discovered model matches — catches a MAC typo. |
-| Interface guard | — | The app refuses to start if the provisioning interface carries this device's default route. |
+| Interface guard | — | Refuses to add a helper address to the interface carrying the default route (warns at startup if shared). |
 
-The attempt ceiling matters more than it looks. Some keys never compare equal to
-what was pushed because the radio rewrites them (password hashes, obscured
-PSKs) — those belong in **Verify Exclude Keys**, which ships populated. Anything
-else that will not converge burns its attempts and stops, showing an attention
-warning in the UI.
+The attempt ceiling matters more than it looks, because it is the *only* guard
+against a key that cannot converge. There is deliberately no exclusion list: every
+override is both compared and written, so a value can never be pushed without
+also being checked. If a key should not be managed, leave it out of the overrides.
+
+If some key does turn out to read back differently from what was written, the
+radio pushes and reboots at most **Max Attempts** times, then parks with a message
+naming the unconverged keys and raises an attention warning. Bounded and
+diagnosable, rather than silent.
 
 **Recovering a parked radio needs no button.** Editing the overrides or variables
 is new intent, which clears the attempt count and retries immediately; otherwise

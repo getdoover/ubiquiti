@@ -92,3 +92,59 @@ def test_reachable_still_refuses_where_it_matters():
         "netif.reachable() must refuse before adding an address to the "
         "default-route interface"
     )
+
+
+# ------------------------------------------------------- layered override sets
+
+
+def test_both_override_layers_exist_as_separate_keys():
+    """Two distinct keys, not one array.
+
+    Doover's `deep_merge` replaces arrays rather than combining them, so a config
+    profile writing `overrides` would wipe the per-install list. Separate keys let
+    a profile own the shared layer and the install own its own.
+    """
+    from ubiquiti_airmax.app_config import AirMaxConfig
+
+    props = AirMaxConfig.to_schema()["properties"]
+    assert "overrides" in props
+    assert "profile_overrides" in props
+    for key in ("overrides", "profile_overrides"):
+        item = props[key]["items"]["properties"]
+        assert set(item) == {"key", "value"}, f"{key} items must be key/value pairs"
+
+
+def test_profile_overrides_renders_last():
+    """It is the shared layer, so it sits at the bottom of the form."""
+    from ubiquiti_airmax.app_config import AirMaxConfig
+
+    order = list(AirMaxConfig.to_schema()["properties"])
+    assert order[0] == "dry_run"
+    assert order[-1] == "profile_overrides"
+
+
+def test_install_overrides_win_over_profile_overrides():
+    """Precedence is what makes the split useful: a profile states the shared
+    intent, and one install can deviate without editing the profile."""
+    from ubiquiti_airmax.provisioner import Override, build_overlay
+
+    profile = [
+        Override("radio.1.mode", "master"),
+        Override("wireless.1.ssid", "PORGERA-AP"),
+        Override("radio.1.txpower", "22"),
+    ]
+    install = [Override("radio.1.txpower", "10")]  # this radio runs quieter
+
+    overlay = build_overlay(profile + install)
+    assert overlay["radio.1.txpower"] == "10", "per-install layer must win"
+    assert overlay["wireless.1.ssid"] == "PORGERA-AP", "profile layer still applies"
+    assert overlay["radio.1.mode"] == "master"
+    assert len(overlay) == 3, "a shadowed key must not appear twice"
+
+
+def test_either_layer_alone_still_works():
+    from ubiquiti_airmax.provisioner import Override, build_overlay
+
+    assert build_overlay([Override("a.b", "1")] + []) == {"a.b": "1"}
+    assert build_overlay([] + [Override("a.b", "2")]) == {"a.b": "2"}
+    assert build_overlay([]) == {}

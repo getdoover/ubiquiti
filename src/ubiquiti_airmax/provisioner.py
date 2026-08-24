@@ -107,7 +107,6 @@ class Settings:
     discovery_timeout: float = 3.0
     ssh_port: int = 22
     manage_addresses: bool = True
-    verify_exclude: tuple[str, ...] = tuple(cfg.DEFAULT_VERIFY_EXCLUDE)
     credentials: list[Credential] = field(
         default_factory=lambda: [Credential("ubnt", "ubnt")]
     )
@@ -278,7 +277,7 @@ class Provisioner:
                 return None
 
             current = await client.read_config()
-            changes = cfg.diff(current, desired, exclude=settings.verify_exclude)
+            changes = cfg.diff(current, desired)
             record.last_diff = cfg.format_diff(changes)
 
             # Verifying a push from an earlier pass.

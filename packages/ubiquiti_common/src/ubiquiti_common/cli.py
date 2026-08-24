@@ -127,7 +127,7 @@ async def cmd_diff(args) -> int:
     desired = _render(Path(args.template), _parse_vars(args.var))
     async with AirOSClient(args.host, _credentials(args)[0]) as client:
         current = await client.read_config()
-    changes = cfg.diff(current, desired, exclude=cfg.DEFAULT_VERIFY_EXCLUDE)
+    changes = cfg.diff(current, desired)
     print(cfg.format_diff(changes))
     return 0
 
@@ -141,7 +141,7 @@ async def cmd_push(args) -> int:
             file=sys.stderr,
         )
         current = await client.read_config()
-        changes = cfg.diff(current, desired, exclude=cfg.DEFAULT_VERIFY_EXCLUDE)
+        changes = cfg.diff(current, desired)
         if not changes:
             print("already converged, nothing to do", file=sys.stderr)
             return 0

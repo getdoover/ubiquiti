@@ -550,7 +550,7 @@
                     "x-hidden": false,
                     "type": "string",
                     "x-required": true,
-                    "description": "The radio this install manages. Accepts 04:18:D6:AA:BB:CC, 04-18-d6-aa-bb-cc or 0418d6aabbcc. Run 'airos discover' to find it \u2014 the number on the device label is a serial, not a MAC.",
+                    "description": "The radio this install manages. Accepts 04:18:D6:AA:BB:CC, 04-18-d6-aa-bb-cc or 0418d6aabbcc. You can also paste the whole string from the device label (e.g. 2450BJ28704EE29BCB) \u2014 Ubiquiti prefixes the MAC with a batch code, and the last 12 hex digits are taken. Run 'airos discover' to read it off the radio directly.",
                     "x-position": 1
                 },
                 "expected_model": {
@@ -575,7 +575,7 @@
                         "null"
                     ],
                     "x-required": false,
-                    "description": "The airOS keys to set. Everything else on the radio is left alone. Leave empty to run as telemetry-only, with no config changes at all.",
+                    "description": "The airOS keys to set for THIS radio. Everything else on the radio is left alone. Applied on top of Profile Overrides, so a key set here wins. Leave both empty to run as telemetry-only.",
                     "default": [],
                     "x-position": 3,
                     "items": {
@@ -807,30 +807,54 @@
                         "x-defaultCollapsed": false
                     }
                 },
-                "verify_exclude": {
-                    "title": "Verify Exclude Keys",
-                    "x-name": "verify_exclude",
+                "profile_overrides": {
+                    "title": "Profile Overrides",
+                    "x-name": "profile_overrides",
                     "x-hidden": false,
                     "type": [
                         "array",
                         "null"
                     ],
                     "x-required": false,
-                    "description": "fnmatch patterns for keys that are pushed but not verified, because the radio rewrites them (password hashes, obscured PSKs).",
-                    "default": [
-                        "users.*.password",
-                        "*.psk",
-                        "*.wpa.psk",
-                        "*.key",
-                        "snmp.*.community"
-                    ],
+                    "description": "Exactly the same as Config Overrides \u2014 airOS keys to set \u2014 but kept as a separate list so a Doover config profile can supply a shared layer without overwriting the per-install one. Put settings common to every radio of this role here (mode, SSID, PSK, frequency, country) and per-radio settings in Config Overrides, which are applied afterwards and win on any key set in both.",
+                    "default": [],
                     "x-position": 14,
                     "items": {
-                        "title": "Key Pattern",
-                        "x-name": "pattern",
+                        "title": "Profile Override",
+                        "x-name": "profile_override",
                         "x-hidden": false,
-                        "type": "string",
-                        "x-required": true
+                        "type": "object",
+                        "x-required": true,
+                        "properties": {
+                            "key": {
+                                "title": "Key",
+                                "x-name": "key",
+                                "x-hidden": false,
+                                "type": "string",
+                                "x-required": true,
+                                "description": "airOS config key, e.g. 'radio.1.freq' or 'netconf.1.ip'. Dotted and 1-indexed where it represents a list.",
+                                "x-position": 1
+                            },
+                            "value": {
+                                "title": "Value",
+                                "x-name": "value",
+                                "x-hidden": false,
+                                "type": [
+                                    "string",
+                                    "null"
+                                ],
+                                "x-required": false,
+                                "description": "Value.",
+                                "default": "",
+                                "x-position": 2
+                            }
+                        },
+                        "additionalElements": true,
+                        "required": [
+                            "key"
+                        ],
+                        "x-collapsible": true,
+                        "x-defaultCollapsed": false
                     }
                 }
             },

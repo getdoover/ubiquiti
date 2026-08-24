@@ -1,7 +1,5 @@
 """airOS config parse / merge / diff."""
 
-import pytest
-
 from ubiquiti_common import cfg
 
 FACTORY = """\
@@ -67,25 +65,32 @@ def test_diff_marks_new_keys_with_none():
     assert changes == {"aaa.bbb": (None, "1")}
 
 
-def test_diff_honours_exclusions():
+def test_diff_and_merge_cover_the_same_keys():
+    """No exclusion list, on purpose.
+
+    An exclusion that applied to ``diff`` but not ``merge`` let a key be written
+    without ever being compared — so a value could be pushed to a radio and its
+    drift never noticed. Every override is now both compared and written; if a key
+    should not be managed, leave it out of the overrides.
+    """
     current = cfg.parse(FACTORY)
-    desired = {"users.1.password": "plaintext", "radio.1.freq": "5800"}
-    changes = cfg.diff(current, desired, exclude=cfg.DEFAULT_VERIFY_EXCLUDE)
-    assert "users.1.password" not in changes
-    assert "radio.1.freq" in changes
+    desired = {"users.1.password": "$1$new$hash", "radio.1.freq": "5800"}
+
+    changes = cfg.diff(current, desired)
+    merged = cfg.merge(current, desired)
+
+    # Secrets are no longer special-cased in either direction.
+    assert "users.1.password" in changes
+    assert merged["users.1.password"] == "$1$new$hash"
+    assert set(changes) <= set(desired)
+    assert all(merged[k] == desired[k] for k in desired)
 
 
-@pytest.mark.parametrize(
-    "key,expected",
-    [
-        ("users.1.password", True),
-        ("wireless.1.wpa.psk", True),
-        ("aaa.1.psk", True),
-        ("radio.1.freq", False),
-    ],
-)
-def test_is_excluded(key, expected):
-    assert cfg.is_excluded(key, cfg.DEFAULT_VERIFY_EXCLUDE) is expected
+def test_diff_takes_no_exclude_argument():
+    """The parameter is gone, not merely unused."""
+    import inspect
+
+    assert "exclude" not in inspect.signature(cfg.diff).parameters
 
 
 def test_format_diff_is_readable():

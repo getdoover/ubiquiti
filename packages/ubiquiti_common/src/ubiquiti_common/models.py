@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass, field
 from enum import Enum
+
+log = logging.getLogger(__name__)
 
 
 class Platform(str, Enum):
@@ -77,17 +80,39 @@ def parse_firmware(firmware: str | None) -> tuple[Platform, str | None, str | No
     )
 
 
+MAC_HEX_DIGITS = 12
+
+
 def normalise_mac(mac: str) -> str:
     """Canonicalise a MAC to lowercase colon-separated form.
 
     Accepts the shapes people actually paste in: ``04:18:D6:AA:BB:CC``,
     ``04-18-d6-aa-bb-cc``, ``0418d6aabbcc``.
+
+    **Over-long input keeps the last 12 hex digits.** Ubiquiti prints the MAC on
+    the device label prefixed by a batch code — a real Bullet AC IP67 shipped as
+    ``2450BJ28704EE29BCB``, whose trailing 12 hex digits are the MAC
+    (``28:70:4e:e2:9b:cb``, confirmed against the radio). Operators reasonably
+    copy the whole string, so take the part that is a MAC rather than rejecting it.
+
+    Non-hex characters are stripped first, which is safe because a MAC is hex by
+    definition — so a separator anywhere, or the ``J`` in that batch code, cannot
+    be part of the address. Anything shorter than 12 hex digits is still an error:
+    there is nothing to recover.
     """
-    cleaned = re.sub(r"[^0-9a-fA-F]", "", mac)
-    if len(cleaned) != 12:
+    cleaned = re.sub(r"[^0-9a-fA-F]", "", mac).lower()
+    if len(cleaned) < MAC_HEX_DIGITS:
         raise ValueError(f"not a MAC address: {mac!r}")
-    cleaned = cleaned.lower()
-    return ":".join(cleaned[i : i + 2] for i in range(0, 12, 2))
+    if len(cleaned) > MAC_HEX_DIGITS:
+        cleaned = cleaned[-MAC_HEX_DIGITS:]
+        # Logged, never silent: if a typo made the input over-long, the truncation
+        # targets a different radio and the operator needs to be able to see that.
+        log.info(
+            "MAC %r is longer than an address; using its last 12 hex digits (%s)",
+            mac,
+            cleaned,
+        )
+    return ":".join(cleaned[i : i + 2] for i in range(0, MAC_HEX_DIGITS, 2))
 
 
 @dataclass

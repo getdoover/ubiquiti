@@ -9,18 +9,10 @@ from pathlib import Path
 
 from pydoover import config
 
+
 # Keys airOS rewrites after we set them (hashes, obscured secrets). Comparing
 # them would leave the radio permanently unconverged, which with autonomous
 # provisioning means a reboot loop. They are still pushed, just not verified.
-DEFAULT_VERIFY_EXCLUDE = [
-    "users.*.password",
-    "*.psk",
-    "*.wpa.psk",
-    "*.key",
-    "snmp.*.community",
-]
-
-
 class Credential(config.Object):
     """One SSH login to try.
 
@@ -88,8 +80,10 @@ class AirMaxConfig(config.Schema):
         name="mac",
         description=(
             "The radio this install manages. Accepts 04:18:D6:AA:BB:CC, "
-            "04-18-d6-aa-bb-cc or 0418d6aabbcc. Run 'airos discover' to find it — "
-            "the number on the device label is a serial, not a MAC."
+            "04-18-d6-aa-bb-cc or 0418d6aabbcc. You can also paste the whole "
+            "string from the device label (e.g. 2450BJ28704EE29BCB) — Ubiquiti "
+            "prefixes the MAC with a batch code, and the last 12 hex digits are "
+            "taken. Run 'airos discover' to read it off the radio directly."
         ),
     )
     expected_model = config.String(
@@ -107,8 +101,9 @@ class AirMaxConfig(config.Schema):
         element=Override("Override"),
         default=[],
         description=(
-            "The airOS keys to set. Everything else on the radio is left alone. "
-            "Leave empty to run as telemetry-only, with no config changes at all."
+            "The airOS keys to set for THIS radio. Everything else on the radio is "
+            "left alone. Applied on top of Profile Overrides, so a key set here "
+            "wins. Leave both empty to run as telemetry-only."
         ),
     )
     # ------------------------------------------------------------------ safety
@@ -198,14 +193,26 @@ class AirMaxConfig(config.Schema):
         default=[{"username": "ubnt", "password": "ubnt", "label": "factory default"}],
         description="Tried in order until one authenticates.",
     )
-    verify_exclude = config.Array(
-        "Verify Exclude Keys",
-        name="verify_exclude",
-        element=config.String("Key Pattern", name="pattern"),
-        default=DEFAULT_VERIFY_EXCLUDE,
+
+    # ------------------------------------------------- shared, profile-supplied
+    #
+    # A second array purely so the two layers survive a Doover config merge.
+    # `deep_merge` replaces arrays rather than combining them, so a config profile
+    # writing `overrides` would wipe the per-install list (and vice versa). Two
+    # distinct keys merge cleanly: the profile owns this one, the install owns the
+    # other, and the app concatenates them.
+    profile_overrides = config.Array(
+        "Profile Overrides",
+        name="profile_overrides",
+        element=Override("Profile Override"),
+        default=[],
         description=(
-            "fnmatch patterns for keys that are pushed but not verified, because "
-            "the radio rewrites them (password hashes, obscured PSKs)."
+            "Exactly the same as Config Overrides — airOS keys to set — but kept as "
+            "a separate list so a Doover config profile can supply a shared layer "
+            "without overwriting the per-install one. Put settings common to every "
+            "radio of this role here (mode, SSID, PSK, frequency, country) and "
+            "per-radio settings in Config Overrides, which are applied afterwards "
+            "and win on any key set in both."
         ),
     )
 

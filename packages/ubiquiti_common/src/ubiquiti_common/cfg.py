@@ -19,21 +19,12 @@ both firmware drift and the XM/XW/AC split.
 
 from __future__ import annotations
 
-from fnmatch import fnmatch
-from typing import Iterable, Mapping
+from typing import Mapping
 
 # Keys the device rewrites after we set them, so they can never compare equal to
 # what we pushed. Verifying them would leave a target permanently "unconverged",
 # and with auto-reconcile on that becomes a reboot loop. Excluded from
 # verification only — they are still pushed.
-DEFAULT_VERIFY_EXCLUDE = (
-    "users.*.password",  # stored as a hash
-    "*.psk",  # WPA pre-shared keys are obscured
-    "*.wpa.psk",
-    "*.key",
-    "snmp.*.community",
-)
-
 Config = dict[str, str]
 
 
@@ -80,27 +71,24 @@ def merge(base: Mapping[str, str], overlay: Mapping[str, str]) -> Config:
     return merged
 
 
-def is_excluded(key: str, patterns: Iterable[str]) -> bool:
-    """True if ``key`` matches any fnmatch pattern in ``patterns``."""
-    return any(fnmatch(key, pattern) for pattern in patterns)
-
-
 def diff(
     current: Mapping[str, str],
     desired: Mapping[str, str],
-    exclude: Iterable[str] = (),
 ) -> dict[str, tuple[str | None, str]]:
     """Keys in ``desired`` that ``current`` does not already satisfy.
 
     Returns ``{key: (current_value_or_None, desired_value)}``. Keys present in
     ``current`` but absent from ``desired`` are ignored — this is an overlay, so
     we never propose removing anything the device set for itself.
+
+    There is no exclusion list. Every key in the overlay is both compared and
+    written, which is what keeps :func:`diff` and :func:`merge` operating on the
+    same key set: an exclusion that applied to one and not the other let a key be
+    written without ever being checked. If a key should not be managed, leave it
+    out of the overrides.
     """
-    exclude = tuple(exclude)
     result: dict[str, tuple[str | None, str]] = {}
     for key, want in desired.items():
-        if exclude and is_excluded(key, exclude):
-            continue
         have = current.get(key)
         if have != want:
             result[key] = (have, want)

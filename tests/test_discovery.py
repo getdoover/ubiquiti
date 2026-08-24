@@ -249,3 +249,83 @@ def test_secondary_bridge_mac_is_not_mistaken_for_the_device():
     d = discovery.parse_reply(data, sender_ip=None)
     assert d.mac == "28:70:4e:e2:9b:cb"
     assert d.ip == "192.168.1.12"
+
+
+# ------------------------------------------------------- unicast fallback
+#
+# Broadcast is not always deliverable. Observed on Porgera Station 2: its br0
+# bridges eth1 + wlan0, and the wireless hop forwards unicast but drops
+# broadcast — ping and ARP worked, a unicast UBNT probe got 4/4 replies, and a
+# broadcast probe got 0. The radios were reachable and completely invisible.
+
+
+async def test_unicast_probe_finds_a_device_broadcast_would_miss():
+    import asyncio
+
+    from ubiquiti_common import discovery as disc
+
+    got = []
+
+    class Responder(asyncio.DatagramProtocol):
+        def connection_made(self, transport):
+            self.transport = transport
+
+        def datagram_received(self, data, addr):
+            got.append(data)
+            self.transport.sendto(BULLET_M, addr)
+
+    loop = asyncio.get_running_loop()
+    transport, _ = await loop.create_datagram_endpoint(
+        Responder, local_addr=("127.0.0.1", disc.DISCOVERY_PORT)
+    )
+    try:
+        devices = await disc.unicast_probe(
+            ["127.0.0.1"], timeout=1.0, bind_addr="127.0.0.1"
+        )
+    finally:
+        transport.close()
+
+    assert got, "no probe reached the responder"
+    assert len(devices) == 1
+    assert devices[0].mac == "04:18:d6:aa:bb:cc"
+
+
+async def test_unicast_probe_with_no_addresses_is_a_noop():
+    from ubiquiti_common import discovery as disc
+
+    assert await disc.unicast_probe([], timeout=0.1) == []
+
+
+def test_hosts_of_enumerates_a_slash_24():
+    import ipaddress
+
+    from ubiquiti_common import discovery as disc
+
+    hosts = disc.hosts_of([ipaddress.ip_network("192.168.1.0/24")])
+    assert len(hosts) == 254
+    assert "192.168.1.1" in hosts and "192.168.1.254" in hosts
+    assert "192.168.1.0" not in hosts and "192.168.1.255" not in hosts
+
+
+def test_hosts_of_skips_networks_over_the_cap():
+    """Never silently partial: an oversized network is skipped, not truncated."""
+    import ipaddress
+
+    from ubiquiti_common import discovery as disc
+
+    assert disc.hosts_of([ipaddress.ip_network("10.0.0.0/16")]) == []
+    mixed = disc.hosts_of(
+        [ipaddress.ip_network("10.0.0.0/16"), ipaddress.ip_network("192.168.5.0/24")]
+    )
+    assert len(mixed) == 254
+
+
+def test_hosts_of_dedupes_overlapping_networks():
+    import ipaddress
+
+    from ubiquiti_common import discovery as disc
+
+    hosts = disc.hosts_of(
+        [ipaddress.ip_network("192.168.1.0/24"), ipaddress.ip_network("192.168.1.0/25")]
+    )
+    assert len(hosts) == len(set(hosts)) == 254

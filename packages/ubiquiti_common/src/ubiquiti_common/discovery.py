@@ -237,6 +237,80 @@ async def discover(
     return devices
 
 
+async def unicast_probe(
+    addresses: list[str],
+    timeout: float = 3.0,
+    probes: tuple[bytes, ...] = (PROBE_V1, PROBE_V2),
+    bind_addr: str = "0.0.0.0",
+    concurrency: int = 256,
+) -> list[DiscoveredDevice]:
+    """Discover by probing specific addresses directly, no broadcast.
+
+    Needed because broadcast is not always deliverable. A Doovit that bridges its
+    LAN onto a wireless interface reaches its radios fine by unicast but never
+    sees a broadcast reply — the radio is perfectly reachable and completely
+    invisible, which is a miserable failure to diagnose in the field.
+
+    The reply is parsed by the same :func:`parse_reply`, so a unicast-discovered
+    radio is indistinguishable from a broadcast-discovered one.
+    """
+    if not addresses:
+        return []
+    loop = asyncio.get_running_loop()
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    sock.setblocking(False)
+    sock.bind((bind_addr, 0))
+    transport, protocol = await loop.create_datagram_endpoint(
+        _DiscoveryProtocol, sock=sock
+    )
+    try:
+        for start in range(0, len(addresses), concurrency):
+            for addr in addresses[start : start + concurrency]:
+                for probe in probes:
+                    try:
+                        transport.sendto(probe, (addr, DISCOVERY_PORT))
+                    except OSError:
+                        pass
+            await asyncio.sleep(0.05)
+        await asyncio.sleep(timeout)
+    finally:
+        transport.close()
+    devices = sorted(protocol.replies.values(), key=lambda d: d.mac)
+    log.info(
+        "unicast probe of %d address(es) found %d device(s)",
+        len(addresses),
+        len(devices),
+    )
+    return devices
+
+
+def hosts_of(networks: list, max_hosts: int = 1024) -> list[str]:
+    """Every usable host address in ``networks``, deduped and bounded.
+
+    Bounded because a sweep is a per-pass cost: a /24 is 254 probes and fine, a
+    /16 is 65k and is not. Anything larger than ``max_hosts`` is skipped rather
+    than truncated, so a sweep is never silently partial.
+    """
+    out: list[str] = []
+    seen = set()
+    for net in networks:
+        if net.num_addresses - 2 > max_hosts:
+            log.warning(
+                "skipping unicast sweep of %s: %d hosts exceeds the %d cap",
+                net,
+                net.num_addresses - 2,
+                max_hosts,
+            )
+            continue
+        for host in net.hosts():
+            addr = str(host)
+            if addr not in seen:
+                seen.add(addr)
+                out.append(addr)
+    return out
+
+
 async def find_by_mac(
     mac: str,
     broadcast_addrs: list[str] | None = None,

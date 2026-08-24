@@ -146,19 +146,72 @@ class AirMaxApplication(Application):
 
     async def _run_pass(self) -> None:
         interface = self.config.interface.value
+        timeout = float(self.config.discovery_timeout.value)
         try:
             broadcasts = await netif.broadcast_addresses(interface)
         except netif.NetifError as exc:
             log.debug("no broadcast addresses for %s (%s)", interface, exc)
             broadcasts = None
 
-        devices = await discovery.discover(
-            broadcast_addrs=broadcasts,
-            timeout=float(self.config.discovery_timeout.value),
-        )
+        devices = await discovery.discover(broadcast_addrs=broadcasts, timeout=timeout)
+        if not self._found_target(devices):
+            devices += await self._unicast_fallback(interface, timeout, devices)
+
         self.last_result = await self.provisioner.run_pass(devices)
         if self.provisioner.telemetry is not None:
             self.telemetry = self.provisioner.telemetry
+
+    def _found_target(self, devices: list) -> bool:
+        spec = self.provisioner.spec
+        return bool(spec) and any(d.mac == spec.mac for d in devices)
+
+    async def _unicast_fallback(self, interface: str, timeout: float, already: list):
+        """Probe addresses directly when broadcast did not turn up the target.
+
+        Broadcast is not always deliverable: a Doovit that bridges its LAN onto a
+        wireless interface reaches its radios by unicast but never sees a broadcast
+        reply, so the radio is reachable and yet invisible.
+
+        Cheapest candidate first — the address we last saw the radio on, then the
+        one the overrides assign it — before sweeping the interface's subnet. Most
+        passes stop at the first candidate; the sweep is for a radio that has moved
+        or has never been seen.
+        """
+        candidates: list[str] = []
+        record = self.provisioner.record
+        if record and record.ip:
+            candidates.append(record.ip)
+        spec = self.provisioner.spec
+        if spec:
+            for o in spec.overrides:
+                if o.key.strip() == "netconf.3.ip" and o.value:
+                    candidates.append(o.value.strip())
+        seen = {d.ip for d in already if d.ip}
+        candidates = [c for c in dict.fromkeys(candidates) if c not in seen]
+
+        if candidates:
+            found = await discovery.unicast_probe(candidates, timeout=timeout)
+            if self._found_target(already + found):
+                return found
+            already = already + found
+
+        try:
+            addrs = await netif.interface_addresses(interface)
+        except netif.NetifError as exc:
+            log.debug("cannot enumerate %s for a sweep (%s)", interface, exc)
+            return []
+        hosts = discovery.hosts_of([a.network for a in addrs])
+        skip = {d.ip for d in already if d.ip} | set(a.address for a in addrs)
+        hosts = [h for h in hosts if h not in skip]
+        if not hosts:
+            return []
+        log.info(
+            "target %s not seen by broadcast; sweeping %d address(es) on %s",
+            spec.mac if spec else "?",
+            len(hosts),
+            interface,
+        )
+        return await discovery.unicast_probe(hosts, timeout=timeout)
 
     # --------------------------------------------------------------- publish
     async def _publish(self) -> None:

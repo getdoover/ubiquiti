@@ -48,6 +48,14 @@ convergence is a background concern that reports its state.
 - **Overlay, never whole-file.** Overrides are a list of `{key, value}`, not a
   `system.cfg`. Read `/tmp/running.cfg`, apply those keys, write back. Never ship
   a complete config; it drops model-specific keys.
+- **Discovery falls back to unicast.** Broadcast is not always deliverable: a
+  Doovit bridging its LAN onto a wireless interface (`br0` = `eth1` + `wlan0`,
+  seen on Porgera Station 2) forwards unicast but drops broadcast, so a radio is
+  reachable by ping/ARP/SSH and invisible to a broadcast probe. `_run_pass` tries
+  broadcast, then — only if the target MAC is absent — the last-known IP, the
+  configured `netconf.3.ip`, and finally a unicast sweep of the interface's
+  subnet. `hosts_of` **skips** a network above its cap rather than truncating, so
+  a sweep is never silently partial.
 - **Deployment Delay holds the first write of a new intent.** Measured from
   `TargetRecord.intent_since` — set on a fresh record (redeploy) *and* on a
   fingerprint change (live config edit) — so a fleet-wide deploy reaches every

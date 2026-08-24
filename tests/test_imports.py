@@ -217,7 +217,48 @@ def test_overview_ui_module_matches_the_widget_bundle():
     assert child["scope"] == scope
 
 
+def test_overview_ui_passes_its_app_key_to_the_widget():
+    """The widget reads `app_key` off the uiElement prop, not from route params.
+
+    DEVICE_MAP and this dashboard's own config both live under that key in the
+    agent's `deployment_config`. Without it the widget has nothing to look up and
+    renders as though no devices were ever granted — which reads as a
+    configuration mistake rather than the missing prop it actually is.
+    """
+    import json
+
+    config = json.loads(_repo_root().joinpath("doover_config.json").read_text())
+    child = config["ubiquiti_network_overview"]["ui_schema"]["children"][
+        "UbiquitiNetwork"
+    ]
+    assert child.get("app_key") == "$config.app().APP_KEY"
+
+
 def _repo_root():
     from pathlib import Path
 
     return Path(__file__).resolve().parents[1]
+
+
+def test_overview_app_block_pins_an_identifier():
+    """A PRO app block must carry `id`, or publishing 404s.
+
+    `doover app publish` PATCHes /applications/{id}/ when an id is pinned, and
+    otherwise POSTs an upsert the control plane resolves from the payload's
+    identifiers. `ubiquiti_airmax` gets away without an id because it carries a
+    `key`; this app has neither by default, and the failure is a bare
+    `HTTP 404 ... {"detail":"No Application matches the given query."}` from CI
+    that says nothing about the cause.
+
+    The value is the app record created on the control plane — see
+    `doover app get ubiquiti_network_overview`. Only the presence is asserted:
+    the app being recreated should not fail the suite.
+    """
+    import json
+
+    config = json.loads(_repo_root().joinpath("doover_config.json").read_text())
+    app = config["ubiquiti_network_overview"]
+    assert app.get("id") or app.get("key"), (
+        "pin `id` (or `key`) in the ubiquiti_network_overview block — without "
+        "one, `doover app publish` cannot resolve the existing application"
+    )

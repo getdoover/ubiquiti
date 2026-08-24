@@ -9,7 +9,7 @@
     "watch": "rsbuild build --watch --mode development",
     "serve": "serve -s assets/ -l 8003",
     "typecheck": "tsc --noEmit",
-    "publish:overview": "rsbuild build && doover channel publish-file ubiquiti_network_overview_1_widget assets/UbiquitiNetworkWidget.js --agent TODO_DASHBOARD_AGENT_ID"
+    "publish:overview": "rsbuild build && doover channel publish-file ubiquiti_network_overview_1_widget assets/UbiquitiNetworkWidget.js --agent 213808870697513740"
   },
   "author": "Doover Team",
   "license": "ISC",

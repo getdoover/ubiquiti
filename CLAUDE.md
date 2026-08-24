@@ -210,6 +210,16 @@ registry, set by `doover app migrate` — not ghcr).
 null is what keeps the app public and unowned. Do not delete the key — a missing
 one fails publish with `{"organisation_id":["This field is required."]}`.
 
+**The processor app block must pin `id`.** `doover app publish` PATCHes
+`/applications/{id}/` when an id is present and otherwise POSTs an upsert the
+control plane resolves from the payload's own identifiers. `ubiquiti_airmax`
+survives without an id because it carries a `key`; `ubiquiti_network_overview`
+has neither by default, and CI then fails with a bare
+`HTTP 404 ... {"detail":"No Application matches the given query."}` that names
+nothing. Recover the value with `doover app get <app-name>`. Note the `export-*`
+commands rewrite `doover_config.json`, so check a hand-added key survives an
+export. Pinned by `test_overview_app_block_pins_an_identifier`.
+
 The processor app needs **no workflow change**: the shared workflow's
 `publish-package` job fans out over whatever `doover app discover` reports as
 `builds_package`, runs `./build.sh`, and uploads the zip. Verify a change to the

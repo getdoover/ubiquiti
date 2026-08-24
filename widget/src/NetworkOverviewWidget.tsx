@@ -25,6 +25,18 @@ interface OverviewDeviceEntry extends DeviceMapEntry {
   app_installs?: Array<{ name?: string | null; application_name?: string | null }>;
 }
 
+/**
+ * The UI element the host renders this component from.
+ *
+ * `app_key` is set in the app's UI schema (`app_key: "$config.app().APP_KEY"`)
+ * and arrives here as a prop — it is NOT in `useRemoteParams()`. Both DEVICE_MAP
+ * and this dashboard's own config live under that key in the agent's
+ * `deployment_config`, so without it there is nothing to look up.
+ */
+interface UiRemoteComponentOverview {
+  app_key?: string;
+}
+
 /** One radio: an AirMax install on a device, and the tags it publishes. */
 export interface RadioNode {
   /** Stable across renders and unique fleet-wide — a device may hold several. */
@@ -58,7 +70,10 @@ function parseStations(raw: unknown): StationRecord[] {
   if (typeof raw !== "string" || !raw) return [];
   try {
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    if (!Array.isArray(parsed)) return [];
+    // Normalised on the way in, for the same reason node MACs are: this is the
+    // AP side of an edge whose other end is a station's `ap_mac`.
+    return parsed.map((station) => ({ ...station, mac: mac(station?.mac) }));
   } catch {
     return [];
   }
@@ -66,6 +81,28 @@ function parseStations(raw: unknown): StationRecord[] {
 
 function str(value: unknown): string | null {
   return typeof value === "string" && value ? value : null;
+}
+
+/**
+ * Canonical lowercase colon-separated MAC, or null.
+ *
+ * Every join in this widget is a string comparison, so both ends have to agree
+ * on case and separator. They do not, in a fleet mid-rollout: AirMax releases
+ * before the topology tags published `ap_mac` verbatim from the radio, which
+ * reports it upper-cased (`28:70:4E:E2:9E:3C`), while newer ones normalise it
+ * first. Normalising here as well means a half-upgraded fleet still draws its
+ * edges instead of silently dropping every one of them.
+ *
+ * All-zero is what an unassociated station reports for `ap_mac` — it is "no
+ * peer", not an address, and must not become a node every idle radio links to.
+ */
+function mac(value: unknown): string | null {
+  const text = str(value);
+  if (!text) return null;
+  const hex = text.replace(/[^0-9a-fA-F]/g, "").toLowerCase();
+  if (hex.length !== 12) return null;
+  if (/^0+$/.test(hex) || /^f+$/.test(hex)) return null;
+  return (hex.match(/.{2}/g) as string[]).join(":");
 }
 
 function num(value: unknown): number | null {
@@ -132,9 +169,9 @@ function useRadios(agentId: string | undefined, appKey: string | undefined) {
           agentId: deviceId,
           appKey: key,
           deviceName: device?.display_name || device?.name || deviceId,
-          radioMac: str(tags.radio_mac),
-          apMac: str(tags.ap_mac),
-          uplinkMac: str(tags.uplink_mac),
+          radioMac: mac(tags.radio_mac),
+          apMac: mac(tags.ap_mac),
+          uplinkMac: mac(tags.uplink_mac),
           stations: parseStations(tags.stations_json),
           online: tags.online === true,
           hostname: str(tags.hostname),
@@ -147,25 +184,66 @@ function useRadios(agentId: string | undefined, appKey: string | undefined) {
     return out.sort((a, b) => a.deviceName.localeCompare(b.deviceName));
   }, [devices, installsByDevice, aggregatesByAgent]);
 
-  return { radios, isLoading: isLoading || query.isLoading, hasDeviceMap };
+  return {
+    radios,
+    devicesGranted: devices.length,
+    isLoading: isLoading || query.isLoading,
+    hasDeviceMap,
+  };
 }
 
-function NetworkOverviewWidgetInner() {
+function NetworkOverviewWidgetInner({
+  uiElement,
+}: {
+  uiElement?: UiRemoteComponentOverview;
+}) {
+  // agentId comes from the route params (camelCase — `agent_id` is undefined);
+  // appKey comes from the element the host rendered us from. Getting either
+  // wrong makes DEVICE_MAP unreadable and every device silently disappear.
   const params = useRemoteParams();
-  const { radios, isLoading, hasDeviceMap } = useRadios(
-    params.agent_id,
-    params.app_key,
+  const agentId = params?.agentId;
+  const appKey = uiElement?.app_key ?? "";
+
+  const { radios, devicesGranted, isLoading, hasDeviceMap } = useRadios(
+    agentId,
+    appKey,
   );
 
   if (isLoading) {
     return <div className="p-4 text-sm text-muted-foreground">Loading radios…</div>;
   }
 
+  // Three different failures that all look like "nothing here", kept apart
+  // because the fix for each is somewhere else entirely.
+  if (!agentId || !appKey) {
+    return (
+      <div className="p-4 text-sm text-muted-foreground">
+        This dashboard could not identify itself
+        {!agentId && " (no agent)"}
+        {!appKey && " (no app key)"}. Try reloading the page; if it persists the
+        app's UI schema needs re-exporting.
+      </div>
+    );
+  }
+
   if (!hasDeviceMap) {
     return (
       <div className="p-4 text-sm text-muted-foreground">
-        No devices granted yet — set <strong>Apps Installed</strong> to the
-        Ubiquiti AirMax app in this dashboard's configuration.
+        No device list has reached this dashboard yet. Grant it access under{" "}
+        <strong>Devices</strong> in this app's configuration — by group, by
+        device, or by <strong>Apps Installed</strong> — then redeploy the app so
+        the platform rebuilds its device list.
+      </div>
+    );
+  }
+
+  if (!radios.length) {
+    return (
+      <div className="p-4 text-sm text-muted-foreground">
+        {devicesGranted} device{devicesGranted === 1 ? "" : "s"} granted, but none
+        of them is running the Ubiquiti AirMax app — so there are no radios to
+        draw. If they do run it, redeploy this dashboard: the device list only
+        names each device's app installs once the platform rebuilds it.
       </div>
     );
   }

@@ -329,3 +329,51 @@ def test_hosts_of_dedupes_overlapping_networks():
         [ipaddress.ip_network("192.168.1.0/24"), ipaddress.ip_network("192.168.1.0/25")]
     )
     assert len(hosts) == len(set(hosts)) == 254
+
+
+def test_unicast_probe_paces_its_sends_and_repeats():
+    """A single 500-datagram burst lost replies: a sweep of 253 addresses found
+    only 3 of 7 radios present, so discovery became a coin toss per pass.
+
+    Pinned at the signature level because the failure is invisible in a unit test
+    with one responder — it only shows up against real hardware under load.
+    """
+    import inspect
+
+    from ubiquiti_common import discovery as disc
+
+    sig = inspect.signature(disc.unicast_probe).parameters
+    assert "batch" in sig and sig["batch"].default <= 32, (
+        "sends must be batched small; a single burst loses replies"
+    )
+    assert "batch_pause" in sig and sig["batch_pause"].default > 0
+    assert "rounds" in sig and sig["rounds"].default >= 2, (
+        "probe at least twice; one round is unreliable"
+    )
+
+
+async def test_unicast_probe_still_finds_a_device_when_paced():
+    """The pacing must not break the happy path."""
+    import asyncio
+
+    from ubiquiti_common import discovery as disc
+
+    class Responder(asyncio.DatagramProtocol):
+        def connection_made(self, transport):
+            self.transport = transport
+
+        def datagram_received(self, data, addr):
+            self.transport.sendto(BULLET_M, addr)
+
+    loop = asyncio.get_running_loop()
+    transport, _ = await loop.create_datagram_endpoint(
+        Responder, local_addr=("127.0.0.1", disc.DISCOVERY_PORT)
+    )
+    try:
+        devices = await disc.unicast_probe(
+            ["127.0.0.1"], timeout=1.0, bind_addr="127.0.0.1"
+        )
+    finally:
+        transport.close()
+    assert len(devices) == 1, "a repeated probe must still dedupe to one device"
+    assert devices[0].mac == "04:18:d6:aa:bb:cc"

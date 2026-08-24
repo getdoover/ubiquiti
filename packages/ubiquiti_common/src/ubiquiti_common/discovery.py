@@ -242,7 +242,9 @@ async def unicast_probe(
     timeout: float = 3.0,
     probes: tuple[bytes, ...] = (PROBE_V1, PROBE_V2),
     bind_addr: str = "0.0.0.0",
-    concurrency: int = 256,
+    batch: int = 24,
+    batch_pause: float = 0.03,
+    rounds: int = 2,
 ) -> list[DiscoveredDevice]:
     """Discover by probing specific addresses directly, no broadcast.
 
@@ -265,14 +267,24 @@ async def unicast_probe(
         _DiscoveryProtocol, sock=sock
     )
     try:
-        for start in range(0, len(addresses), concurrency):
-            for addr in addresses[start : start + concurrency]:
-                for probe in probes:
-                    try:
-                        transport.sendto(probe, (addr, DISCOVERY_PORT))
-                    except OSError:
-                        pass
-            await asyncio.sleep(0.05)
+        # Paced in small batches, and repeated. A single burst of 500+ datagrams
+        # was measured finding only 3 of 7 radios that were present: the send
+        # storm loses replies, so a sweep became a coin toss and a radio could sit
+        # undiscovered for many passes. Small batches plus a second round make it
+        # reliable for a fraction of a second more.
+        for round_no in range(max(1, rounds)):
+            for start in range(0, len(addresses), batch):
+                for addr in addresses[start : start + batch]:
+                    for probe in probes:
+                        try:
+                            transport.sendto(probe, (addr, DISCOVERY_PORT))
+                        except OSError:
+                            pass
+                await asyncio.sleep(batch_pause)
+            if round_no + 1 < max(1, rounds):
+                # Let the first round's replies land before re-probing; anything
+                # already answered is deduped by MAC.
+                await asyncio.sleep(min(1.0, timeout / 2))
         await asyncio.sleep(timeout)
     finally:
         transport.close()

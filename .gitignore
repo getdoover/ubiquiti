@@ -16,6 +16,10 @@ eggs/
 .eggs/
 lib/
 lib64/
+# ...but `lib/` above is unanchored, so it also swallows widget/src/lib/ — the
+# topology join, the layout and the appearance helpers. Committing without this
+# pushes a widget that cannot compile, and nothing warns you.
+!widget/src/lib/
 parts/
 sdist/
 var/

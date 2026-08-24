@@ -160,6 +160,11 @@ own agent, and it reads what the AirMax installs already publish. Point its
 *Apps Installed* permission at the AirMax app and it finds its own radios —
 including the multi-radio Doovits that run an uplink and a downlink side by side.
 
+The view is a link diagram: each Doovit is a box holding its radios, wireless
+hops run box to box coloured by SNR and thickened by throughput, and each hop
+carries its own stats. Clicking a radio opens its full telemetry. A table view is
+a toggle away for scanning raw values.
+
 Topology comes from three tags each AirMax install publishes: `radio_mac`
 (the radio's own identity, which is also its BSSID in AP mode), `ap_mac` (the
 peer a station is associated with) and `stations_json` (the peers an AP can

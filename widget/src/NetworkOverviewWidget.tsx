@@ -1,144 +1,113 @@
 import "./styles.css";
+import "@xyflow/react/dist/style.css";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 
 import RemoteComponentWrapper from "customer_site/RemoteComponentWrapper";
 import { useRemoteParams } from "customer_site/useRemoteParams";
 
 import {
   DooverProvider,
+  useAgentChannel,
   useDeviceMap,
   useMultiAgentAggregates,
   type DeviceMapEntry,
 } from "doover-js/react";
 import { peekDooverClient } from "doover-js";
 
-import { Card, CardContent } from "./components/ui/card";
-import { Badge } from "./components/ui/badge";
+import { Background, Controls, MiniMap, ReactFlow } from "@xyflow/react";
 
-// The AirMax app's name in the app registry. A device may run several installs
-// of it (an uplink and a downlink on the same Doovit is the normal case), each
-// publishing its tags under its own app key.
+import { Badge } from "./components/ui/badge";
+import { Button } from "./components/ui/button";
+import { Card, CardContent } from "./components/ui/card";
+import { DeviceGroupNode } from "./components/DeviceGroupNode";
+import { LinkEdge } from "./components/LinkEdge";
+import { RadioNode } from "./components/RadioNode";
+import { HEALTH_COLOUR, STATE_LABEL, radioState } from "./lib/appearance";
+import { layoutTopology } from "./lib/layout";
+import { buildTopology, healthOf, type Radio, type StationRecord } from "./lib/topology";
+
 const AIRMAX_APPLICATION = "ubiquiti_airmax";
+const DEFAULT_STALE_MINUTES = 10;
 
 interface OverviewDeviceEntry extends DeviceMapEntry {
   app_installs?: Array<{ name?: string | null; application_name?: string | null }>;
 }
 
-/**
- * The UI element the host renders this component from.
- *
- * `app_key` is set in the app's UI schema (`app_key: "$config.app().APP_KEY"`)
- * and arrives here as a prop — it is NOT in `useRemoteParams()`. Both DEVICE_MAP
- * and this dashboard's own config live under that key in the agent's
- * `deployment_config`, so without it there is nothing to look up.
- */
+/** `app_key` arrives as a prop from the UI schema — it is not in useRemoteParams. */
 interface UiRemoteComponentOverview {
   app_key?: string;
 }
 
-/** One radio: an AirMax install on a device, and the tags it publishes. */
-export interface RadioNode {
-  /** Stable across renders and unique fleet-wide — a device may hold several. */
-  id: string;
-  agentId: string;
-  appKey: string;
-  deviceName: string;
-  /** Identity and topology, straight off the tags. */
-  radioMac: string | null;
-  apMac: string | null;
-  uplinkMac: string | null;
-  stations: StationRecord[];
-  online: boolean;
-  hostname: string | null;
-  signal: number | null;
-  snr: number | null;
-  lastUpdated: number | null;
-}
-
-export interface StationRecord {
-  mac: string | null;
-  hostname?: string | null;
-  signal_dbm?: number | null;
-  ccq_pct?: number | null;
-  tx_rate_mbps?: number | null;
-  rx_rate_mbps?: number | null;
-}
-
-/** `stations_json` is a JSON string in a string tag, and may be absent. */
-function parseStations(raw: unknown): StationRecord[] {
-  if (typeof raw !== "string" || !raw) return [];
-  try {
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    // Normalised on the way in, for the same reason node MACs are: this is the
-    // AP side of an edge whose other end is a station's `ap_mac`.
-    return parsed.map((station) => ({ ...station, mac: mac(station?.mac) }));
-  } catch {
-    return [];
-  }
-}
+// Defined at module scope: React Flow re-creates its internals when these
+// identities change, so an inline object would remount the graph every render.
+const nodeTypes = { device: DeviceGroupNode, radio: RadioNode };
+const edgeTypes = { link: LinkEdge };
 
 function str(value: unknown): string | null {
   return typeof value === "string" && value ? value : null;
-}
-
-/**
- * Canonical lowercase colon-separated MAC, or null.
- *
- * Every join in this widget is a string comparison, so both ends have to agree
- * on case and separator. They do not, in a fleet mid-rollout: AirMax releases
- * before the topology tags published `ap_mac` verbatim from the radio, which
- * reports it upper-cased (`28:70:4E:E2:9E:3C`), while newer ones normalise it
- * first. Normalising here as well means a half-upgraded fleet still draws its
- * edges instead of silently dropping every one of them.
- *
- * All-zero is what an unassociated station reports for `ap_mac` — it is "no
- * peer", not an address, and must not become a node every idle radio links to.
- */
-function mac(value: unknown): string | null {
-  const text = str(value);
-  if (!text) return null;
-  const hex = text.replace(/[^0-9a-fA-F]/g, "").toLowerCase();
-  if (hex.length !== 12) return null;
-  if (/^0+$/.test(hex) || /^f+$/.test(hex)) return null;
-  return (hex.match(/.{2}/g) as string[]).join(":");
 }
 
 function num(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-/**
- * Every AirMax install across the fleet, joined to the tags it publishes.
- *
- * The app keys come from DEVICE_MAP rather than being guessed from the shape of
- * the `tag_values` aggregate: an install's key is operator-chosen
- * (`airmax_upstream`, not `ubiquiti_airmax_1`), so prefix-matching would miss
- * exactly the multi-radio devices this view exists to draw.
- */
+/** Aggregates stamp seconds in some paths and milliseconds in others. */
+function toEpochMs(value: number | null | undefined): number | null {
+  if (value === null || value === undefined || !Number.isFinite(value)) return null;
+  return value < 1e12 ? value * 1000 : value;
+}
+
+function parseStations(raw: unknown): StationRecord[] {
+  if (typeof raw !== "string" || !raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+/** The Doovit's own connection, which is a different question from whether its
+ * radio answered. `doover_connection` nests the status but flattens on some
+ * message paths, so both shapes are accepted. */
+function agentIsOnline(aggregate: unknown): boolean {
+  const data = (aggregate as { data?: Record<string, unknown> } | undefined)?.data;
+  if (!data) return false;
+  const determination = str(data.determination);
+  if (determination) return determination.toLowerCase() === "online";
+  const status = data.status as Record<string, unknown> | string | undefined;
+  const text = typeof status === "string" ? status : str(status?.status);
+  return Boolean(text && text.toLowerCase().includes("online"));
+}
+
 function useRadios(agentId: string | undefined, appKey: string | undefined) {
   const { devices, deviceIds, isLoading, hasDeviceMap } =
     useDeviceMap<OverviewDeviceEntry>(agentId, appKey);
 
-  // The union of AirMax app keys in the fleet, used to project the tag fetch
-  // down to the subtrees this widget actually reads. `tag_values` holds every
-  // app on the device; without this a Doovit running a dozen apps ships all of
-  // them on every poll.
+  const { data: deploymentConfig } = useAgentChannel<Record<string, any>>(
+    agentId,
+    "deployment_config",
+  );
+  const staleAfterMs = useMemo(() => {
+    const minutes = num(deploymentConfig?.applications?.[appKey ?? ""]?.stale_after_minutes);
+    return Math.max(1, minutes ?? DEFAULT_STALE_MINUTES) * 60_000;
+  }, [deploymentConfig, appKey]);
+
+  // App keys come from DEVICE_MAP, never from the shape of `tag_values`: an
+  // install's key is operator-chosen (`airmax_upstream`), so prefix-matching
+  // would miss exactly the multi-radio devices this view exists to draw.
   const { installsByDevice, fields } = useMemo(() => {
     const byDevice = new Map<string, string[]>();
     const keys = new Set<string>();
     for (const device of devices) {
       const names = (device.app_installs ?? [])
-        .filter(
-          (install) =>
-            (install.application_name ?? "").toLowerCase() === AIRMAX_APPLICATION,
-        )
-        .map((install) => install.name)
-        .filter((name): name is string => Boolean(name));
+        .filter((i) => (i.application_name ?? "").toLowerCase() === AIRMAX_APPLICATION)
+        .map((i) => i.name)
+        .filter((n): n is string => Boolean(n));
       if (names.length) {
         byDevice.set(device.id, names);
-        names.forEach((name) => keys.add(name));
+        names.forEach((n) => keys.add(n));
       }
     }
     return { installsByDevice: byDevice, fields: [...keys].sort() };
@@ -149,18 +118,25 @@ function useRadios(agentId: string | undefined, appKey: string | undefined) {
     [deviceIds, installsByDevice],
   );
 
-  const { aggregatesByAgent, query } = useMultiAgentAggregates(
-    "tag_values",
+  const { aggregatesByAgent, query } = useMultiAgentAggregates("tag_values", radioIds, {
+    fields,
+  });
+  const { aggregatesByAgent: connections } = useMultiAgentAggregates(
+    "doover_connection",
     radioIds,
-    { fields },
   );
 
-  const radios = useMemo<RadioNode[]>(() => {
-    const byId = new Map(devices.map((device) => [device.id, device]));
-    const out: RadioNode[] = [];
+  const radios = useMemo<Radio[]>(() => {
+    const byId = new Map(devices.map((d) => [d.id, d]));
+    const now = Date.now();
+    const out: Radio[] = [];
+
     for (const [deviceId, appKeys] of installsByDevice) {
       const aggregate = aggregatesByAgent[deviceId];
       const device = byId.get(deviceId);
+      const lastUpdated = toEpochMs(aggregate?.last_updated ?? null);
+      const agentOnline = agentIsOnline(connections[deviceId]);
+
       for (const key of appKeys) {
         const tags = (aggregate?.data as Record<string, any> | undefined)?.[key];
         if (!tags) continue;
@@ -169,20 +145,37 @@ function useRadios(agentId: string | undefined, appKey: string | undefined) {
           agentId: deviceId,
           appKey: key,
           deviceName: device?.display_name || device?.name || deviceId,
-          radioMac: mac(tags.radio_mac),
-          apMac: mac(tags.ap_mac),
-          uplinkMac: mac(tags.uplink_mac),
+          groupName: str((device?.group as { name?: string } | undefined)?.name),
+
+          radioMac: str(tags.radio_mac),
+          apMac: str(tags.ap_mac),
+          uplinkMac: str(tags.uplink_mac),
           stations: parseStations(tags.stations_json),
+
           online: tags.online === true,
+          agentOnline,
+          stale: lastUpdated !== null && now - lastUpdated > staleAfterMs,
+
           hostname: str(tags.hostname),
-          signal: num(tags.signal),
-          snr: num(tags.snr),
-          lastUpdated: aggregate?.last_updated ?? null,
+          model: str(tags.model),
+          wirelessMode: str(tags.wireless_mode),
+          essid: str(tags.essid),
+          frequencyMhz: num(tags.frequency),
+
+          signalDbm: num(tags.signal),
+          noiseDbm: num(tags.noise_floor),
+          snrDb: num(tags.snr),
+          ccqPct: num(tags.ccq),
+          txRateMbps: num(tags.tx_rate),
+          rxRateMbps: num(tags.rx_rate),
+          txThroughputKbps: num(tags.tx_throughput),
+          rxThroughputKbps: num(tags.rx_throughput),
+          lastUpdated,
         });
       }
     }
-    return out.sort((a, b) => a.deviceName.localeCompare(b.deviceName));
-  }, [devices, installsByDevice, aggregatesByAgent]);
+    return out;
+  }, [devices, installsByDevice, aggregatesByAgent, connections, staleAfterMs]);
 
   return {
     radios,
@@ -192,121 +185,245 @@ function useRadios(agentId: string | undefined, appKey: string | undefined) {
   };
 }
 
-function NetworkOverviewWidgetInner({
-  uiElement,
-}: {
-  uiElement?: UiRemoteComponentOverview;
-}) {
-  // agentId comes from the route params (camelCase — `agent_id` is undefined);
-  // appKey comes from the element the host rendered us from. Getting either
-  // wrong makes DEVICE_MAP unreadable and every device silently disappear.
+function Legend() {
+  return (
+    <div className="flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
+      <span className="font-medium">Link SNR</span>
+      {(["excellent", "good", "fair", "poor", "unknown"] as const).map((health) => (
+        <span key={health} className="flex items-center gap-1">
+          <span
+            className="inline-block h-[3px] w-5 rounded-full"
+            style={{ background: HEALTH_COLOUR[health] }}
+          />
+          {health}
+        </span>
+      ))}
+      <span className="ml-2">· thickness = throughput · dashed = declared or LAN</span>
+    </div>
+  );
+}
+
+function DetailPanel({ radio, onClose }: { radio: Radio; onClose: () => void }) {
+  const rows: Array<[string, string | null]> = [
+    ["Device", radio.deviceName],
+    ["Install", radio.appKey],
+    ["Status", STATE_LABEL[radioState(radio)]],
+    ["Hostname", radio.hostname],
+    ["Model", radio.model],
+    ["Mode", radio.wirelessMode],
+    ["SSID", radio.essid],
+    ["Radio MAC", radio.radioMac],
+    ["Peer (ap_mac)", radio.apMac ?? radio.uplinkMac],
+    ["Frequency", radio.frequencyMhz ? `${Math.round(radio.frequencyMhz)} MHz` : null],
+    ["Signal", radio.signalDbm !== null ? `${radio.signalDbm} dBm` : null],
+    ["Noise floor", radio.noiseDbm !== null ? `${radio.noiseDbm} dBm` : null],
+    ["SNR", radio.snrDb !== null ? `${radio.snrDb} dB` : null],
+    ["CCQ", radio.ccqPct !== null ? `${radio.ccqPct}%` : null],
+    ["TX / RX rate", radio.txRateMbps !== null ? `${radio.txRateMbps} / ${radio.rxRateMbps} Mbps` : null],
+    ["Stations", radio.stations.length ? String(radio.stations.length) : null],
+  ];
+
+  return (
+    <div className="absolute right-3 top-3 z-10 w-64 rounded-lg border border-border bg-card p-3 shadow-lg">
+      <div className="mb-2 flex items-start justify-between gap-2">
+        <span className="text-sm font-semibold">{radio.hostname || radio.appKey}</span>
+        <Button variant="ghost" size="sm" className="h-6 px-1 text-xs" onClick={onClose}>
+          Close
+        </Button>
+      </div>
+      <dl className="space-y-1">
+        {rows
+          .filter(([, value]) => value)
+          .map(([label, value]) => (
+            <div key={label} className="flex justify-between gap-2 text-[11px]">
+              <dt className="text-muted-foreground">{label}</dt>
+              <dd className="truncate text-right font-medium">{value}</dd>
+            </div>
+          ))}
+      </dl>
+    </div>
+  );
+}
+
+function RadioTable({ radios }: { radios: Radio[] }) {
+  return (
+    <Card>
+      <CardContent className="overflow-x-auto p-0">
+        <table className="w-full text-left text-sm">
+          <thead className="text-muted-foreground">
+            <tr>
+              <th className="p-2">Device</th>
+              <th className="p-2">Install</th>
+              <th className="p-2">Radio MAC</th>
+              <th className="p-2">Peer</th>
+              <th className="p-2">SNR</th>
+              <th className="p-2">Signal</th>
+              <th className="p-2">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {radios.map((radio) => (
+              <tr key={radio.id} className="border-t">
+                <td className="p-2">{radio.deviceName}</td>
+                <td className="p-2">{radio.hostname || radio.appKey}</td>
+                <td className="p-2 font-mono text-xs">{radio.radioMac ?? "—"}</td>
+                <td className="p-2 font-mono text-xs">{radio.apMac ?? radio.uplinkMac ?? "—"}</td>
+                <td className="p-2">{radio.snrDb !== null ? `${radio.snrDb} dB` : "—"}</td>
+                <td className="p-2">{radio.signalDbm !== null ? `${radio.signalDbm} dBm` : "—"}</td>
+                <td className="p-2">{STATE_LABEL[radioState(radio)]}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </CardContent>
+    </Card>
+  );
+}
+
+function NetworkOverviewWidgetInner({ uiElement }: { uiElement?: UiRemoteComponentOverview }) {
   const params = useRemoteParams();
   const agentId = params?.agentId;
   const appKey = uiElement?.app_key ?? "";
 
-  const { radios, devicesGranted, isLoading, hasDeviceMap } = useRadios(
-    agentId,
-    appKey,
-  );
+  const [view, setView] = useState<"diagram" | "table">("diagram");
+  const [selected, setSelected] = useState<string | null>(null);
+
+  const { radios, devicesGranted, isLoading, hasDeviceMap } = useRadios(agentId, appKey);
+  const topology = useMemo(() => buildTopology(radios), [radios]);
+  const { nodes, edges } = useMemo(() => layoutTopology(topology), [topology]);
 
   if (isLoading) {
     return <div className="p-4 text-sm text-muted-foreground">Loading radios…</div>;
   }
-
-  // Three different failures that all look like "nothing here", kept apart
-  // because the fix for each is somewhere else entirely.
   if (!agentId || !appKey) {
     return (
       <div className="p-4 text-sm text-muted-foreground">
         This dashboard could not identify itself
         {!agentId && " (no agent)"}
-        {!appKey && " (no app key)"}. Try reloading the page; if it persists the
-        app's UI schema needs re-exporting.
+        {!appKey && " (no app key)"}. Try reloading; if it persists the app's UI
+        schema needs re-exporting.
       </div>
     );
   }
-
   if (!hasDeviceMap) {
     return (
       <div className="p-4 text-sm text-muted-foreground">
         No device list has reached this dashboard yet. Grant it access under{" "}
-        <strong>Devices</strong> in this app's configuration — by group, by
-        device, or by <strong>Apps Installed</strong> — then redeploy the app so
-        the platform rebuilds its device list.
+        <strong>Devices</strong> in this app's configuration — by group, by device,
+        or by <strong>Apps Installed</strong> — then redeploy so the platform
+        rebuilds its device list.
       </div>
     );
   }
-
   if (!radios.length) {
     return (
       <div className="p-4 text-sm text-muted-foreground">
-        {devicesGranted} device{devicesGranted === 1 ? "" : "s"} granted, but none
-        of them is running the Ubiquiti AirMax app — so there are no radios to
-        draw. If they do run it, redeploy this dashboard: the device list only
-        names each device's app installs once the platform rebuilds it.
+        {devicesGranted} device{devicesGranted === 1 ? "" : "s"} granted, but none is
+        running the Ubiquiti AirMax app.
       </div>
     );
   }
 
-  const online = radios.filter((radio) => radio.online).length;
-  const linked = radios.filter((radio) => radio.apMac || radio.uplinkMac).length;
-  const unidentified = radios.filter((radio) => !radio.radioMac).length;
+  const online = radios.filter((r) => radioState(r) === "ok").length;
+  const wireless = topology.links.filter((l) => l.kind === "wireless");
+  const worst = wireless
+    .map((l) => l.snrDb)
+    .filter((v): v is number => v !== null)
+    .sort((a, b) => a - b)[0];
+  const selectedRadio = radios.find((r) => r.id === selected) ?? null;
 
   return (
-    <div className="p-4 space-y-4">
+    <div className="space-y-3 p-4">
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <Badge>{radios.length} radios</Badge>
         <Badge>{online} online</Badge>
-        <Badge>{linked} with a peer</Badge>
-        {unidentified > 0 && (
-          <Badge variant="destructive">
-            {unidentified} without radio_mac — redeploy AirMax
+        <Badge>{wireless.length} links</Badge>
+        {worst !== undefined && (
+          <Badge style={{ background: HEALTH_COLOUR[healthOf(worst)], color: "white" }}>
+            worst link {Math.round(worst)} dB
           </Badge>
         )}
+        {topology.unplaceable.length > 0 && (
+          <Badge variant="destructive">
+            {topology.unplaceable.length} without radio_mac — redeploy AirMax
+          </Badge>
+        )}
+        <span className="ml-auto inline-flex overflow-hidden rounded-md border border-border">
+          {(["diagram", "table"] as const).map((mode) => (
+            <button
+              key={mode}
+              type="button"
+              onClick={() => setView(mode)}
+              className={`px-2 py-1 text-xs capitalize ${
+                view === mode ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground"
+              }`}
+            >
+              {mode}
+            </button>
+          ))}
+        </span>
       </div>
 
-      <Card>
-        <CardContent className="overflow-x-auto p-0">
-          <table className="w-full text-left text-sm">
-            <thead className="text-muted-foreground">
-              <tr>
-                <th className="p-2">Device</th>
-                <th className="p-2">Install</th>
-                <th className="p-2">Radio MAC</th>
-                <th className="p-2">Uplink (ap_mac)</th>
-                <th className="p-2">Stations</th>
-                <th className="p-2">Signal</th>
-                <th className="p-2">Online</th>
-              </tr>
-            </thead>
-            <tbody>
-              {radios.map((radio) => (
-                <tr key={radio.id} className="border-t">
-                  <td className="p-2">{radio.deviceName}</td>
-                  <td className="p-2">{radio.hostname || radio.appKey}</td>
-                  <td className="p-2 font-mono text-xs">{radio.radioMac ?? "—"}</td>
-                  <td className="p-2 font-mono text-xs">
-                    {radio.apMac ?? radio.uplinkMac ?? "—"}
-                  </td>
-                  <td className="p-2">{radio.stations.length || "—"}</td>
-                  <td className="p-2">
-                    {radio.signal !== null ? `${radio.signal} dBm` : "—"}
-                  </td>
-                  <td className="p-2">{radio.online ? "yes" : "no"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </CardContent>
-      </Card>
+      {view === "diagram" ? (
+        <>
+          <div className="relative h-[520px] w-full overflow-hidden rounded-xl border border-border bg-background">
+            <ReactFlow
+              nodes={nodes as never}
+              edges={edges as never}
+              nodeTypes={nodeTypes}
+              edgeTypes={edgeTypes}
+              fitView
+              proOptions={{ hideAttribution: false }}
+              minZoom={0.2}
+              maxZoom={2}
+              nodesConnectable={false}
+              onNodeClick={(_, node) => setSelected(String(node.id))}
+              onPaneClick={() => setSelected(null)}
+            >
+              <Background gap={18} size={1} />
+              <Controls showInteractive={false} />
+              <MiniMap pannable zoomable />
+            </ReactFlow>
+            {selectedRadio && (
+              <DetailPanel radio={selectedRadio} onClose={() => setSelected(null)} />
+            )}
+          </div>
+          <Legend />
+          {topology.danglingPeers.length > 0 && (
+            <p className="text-[11px] text-muted-foreground">
+              {topology.danglingPeers.length} radio
+              {topology.danglingPeers.length === 1 ? " is" : "s are"} associated to a
+              peer this dashboard cannot see — it is outside the granted devices, or
+              not running the AirMax app.
+            </p>
+          )}
+          {topology.unplaceable.length > 0 && (
+            <div className="rounded-lg border border-dashed border-border p-3">
+              <p className="mb-2 text-[11px] text-muted-foreground">
+                Not on the diagram — these installs publish no <code>radio_mac</code>,
+                so there is no identity to place them by. They need an AirMax release
+                that publishes the topology tags.
+              </p>
+              <div className="flex flex-wrap gap-1">
+                {topology.unplaceable.map((radio) => (
+                  <Badge key={radio.id} variant="secondary">
+                    {radio.deviceName} · {radio.appKey}
+                  </Badge>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      ) : (
+        <RadioTable radios={radios} />
+      )}
     </div>
   );
 }
 
 // doover-js is bundled rather than shared, so the host's own <DooverProvider>
 // is invisible to this widget's context. peekDooverClient() returns the live
-// client the host keeps on globalThis, which is then re-provided here — same
-// socket, same auth, same gateway.
+// client the host keeps on globalThis — same socket, same auth, same gateway.
 const NetworkOverviewWidget = (props: any) => {
   const client = peekDooverClient();
   if (!client) return null;

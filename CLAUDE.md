@@ -145,6 +145,42 @@ The Python side is almost empty on purpose — config, UI schema, and an
 - **The UI schema's `module`/`scope` must match `widget/rsbuild.config.ts`.** A
   mismatch fails no build — the app publishes, the bundle loads, the panel
   renders empty. Pinned by `test_overview_ui_module_matches_the_widget_bundle`.
+- **`agentId` comes from `useRemoteParams()`, `app_key` from the `uiElement`
+  prop.** Not interchangeable, and `params.agent_id` does not exist. Getting
+  either wrong makes DEVICE_MAP unreadable and every device vanish behind a
+  message blaming the operator's config. Cost half a debugging session once.
+
+### The diagram
+
+`widget/src/lib/topology.ts` is the core, and the only part with unit tests
+(`vitest`) — it is where a wrong answer is dangerous, because a wrong graph
+renders confidently instead of erroring.
+
+- **Normalisation lives inside `buildTopology`, not in its callers.** The join is
+  a string comparison between MACs arriving from three places — a tag written by
+  a current AirMax release, a tag written by an older one (upper-case), and an
+  operator-typed config field. A mismatch yields an empty graph with no error
+  anywhere. Pinned by the mixed-case test.
+- **Two kinds of link, and they are not the same thing.** A *wireless* hop
+  (`station.ap_mac == ap.radio_mac`) carries all the stats. A *LAN* link is two
+  radios cabled together inside one Doovit — no stats exist, so it is drawn thin
+  and dashed and unlabelled. A device's radios are joined as a *path*, not a
+  mesh, so a three-radio site does not sprout meaningless edges.
+- **Hops are discovered from both ends and deduplicated.** A station names its AP
+  and an AP names its stations; either alone draws the hop, which matters because
+  the two ends are polled independently. When both report, the AP-side signal is
+  kept alongside the station's — the disagreement between the ends is itself the
+  diagnosis.
+- **Layout is per *device*, not per radio** (`lib/layout.ts`). dagre ranks the
+  Doovits by RF hops and radios stack inside their box. Ranking a dozen boxes is
+  far more stable than two dozen loose nodes, so the diagram does not reshuffle
+  when one radio drops out. Deliberately hierarchical, not force-directed: the
+  topology is a daisy chain, and a physics layout of a chain drifts between
+  renders and hides which hop is bad.
+- **A radio with no `radio_mac` is never dropped**, it goes to the tray below the
+  diagram. That is every radio until the topology-tag release reaches the fleet.
+- **SNR bands are conventional, not reported by the hardware.** `SNR_BANDS` in
+  `lib/appearance.ts` is the single place to change them.
 
 ## Environment facts
 

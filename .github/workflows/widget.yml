@@ -1,0 +1,54 @@
+name: Widget
+
+# The remote component for `ubiquiti_network_overview`. Deliberately a separate
+# workflow: the shared `getdoover/workflows` app workflow covers the Python apps
+# and must not be replaced or forked, and it has no notion of an npm package.
+#
+# What it guards: rspack only strips types, it does not check them, and the
+# topology join is the one piece of logic here that fails silently — a wrong
+# graph renders confidently rather than erroring.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "widget/**"
+      - ".github/workflows/widget.yml"
+  pull_request:
+    paths:
+      - "widget/**"
+      - ".github/workflows/widget.yml"
+  workflow_dispatch:
+
+jobs:
+  widget:
+    name: Typecheck, test and build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: widget/package-lock.json
+
+      # `ci` rather than `install`, so a drifted lockfile fails here rather than
+      # silently resolving to something the publish build never saw.
+      - run: npm --prefix widget ci
+
+      - name: Typecheck
+        run: npm --prefix widget run typecheck
+
+      - name: Test
+        run: npm --prefix widget test
+
+      # The same command `doover app publish` runs, so a build that only breaks
+      # in CI is caught here rather than half way through a deploy.
+      - name: Build
+        run: npm --prefix widget run build
+
+      - name: Check the bundle landed where doover_config points
+        run: |
+          WIDGET=$(python3 -c "import json; print(json.load(open('doover_config.json'))['ubiquiti_network_overview']['widget'])")
+          test -f "$WIDGET" || { echo "::error::bundle not found at $WIDGET"; exit 1; }
+          echo "$WIDGET  $(du -h "$WIDGET" | cut -f1)"

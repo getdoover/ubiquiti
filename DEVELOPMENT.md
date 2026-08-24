@@ -76,12 +76,21 @@ must report `builds_package: true` and `widget: true`.
 
 ```bash
 cd widget
-npm install
+npm ci                 # `ci`, not `install` — a drifted lockfile should fail
 npm run build          # -> assets/UbiquitiNetworkWidget.js
 npm run watch          # rebuild on change
 npm run serve          # serve assets/ on :8003 to host it locally
 npm run typecheck      # rspack only strips types; this is what checks them
+npm test               # vitest, covering lib/topology.ts
 ```
+
+`.github/workflows/widget.yml` runs typecheck, test and build on any change
+under `widget/`. It is separate from the shared app workflow on purpose — that
+one owns the Python apps and must not be forked.
+
+The diagram is React Flow (`@xyflow/react`) with `@dagrejs/dagre` for layout,
+both MIT. `elkjs` was rejected on licence (EPL/GPL). The bundle is ~700 KB raw,
+~205 KB gzipped.
 
 `./build.sh` at the repo root does the Python packaging and then builds the
 widget, which is what CI runs.

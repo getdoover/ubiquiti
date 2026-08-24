@@ -3,7 +3,7 @@
  * table cannot drift apart.
  */
 
-import type { Health, Link, Radio } from "./topology";
+import { healthOf, type Health, type Link, type Radio } from "./topology";
 
 /** Explicit hex rather than Tailwind classes: SVG strokes and box-shadows need
  * a real colour value, and these have to match between an edge and its pill. */
@@ -131,4 +131,24 @@ export function formatAge(ms: number | null): string | null {
   const hours = Math.round(minutes / 60);
   if (hours < 48) return `${hours}h`;
   return `${Math.round(hours / 24)}d`;
+}
+
+
+/**
+ * The colour band for a link.
+ *
+ * A hop whose two ends have both gone quiet is **unknown**, not bad. Its last
+ * SNR might have been excellent, and painting it green would assert that the
+ * link is fine right now — precisely the claim we cannot make. Grey, with a
+ * question mark in place of the headline figure, says what is actually true.
+ */
+export function linkHealth(link: Link): Health {
+  return link.unreachable ? "unknown" : healthOf(link.snrDb);
+}
+
+/** Latency reads in single or double digits on a healthy airMAX hop, so keep a
+ * decimal below 10 where the difference between 2 ms and 9 ms matters. */
+export function formatLatency(ms: number | null): string | null {
+  if (ms === null || !Number.isFinite(ms) || ms < 0) return null;
+  return ms < 10 ? `${ms.toFixed(1)} ms` : `${Math.round(ms)} ms`;
 }

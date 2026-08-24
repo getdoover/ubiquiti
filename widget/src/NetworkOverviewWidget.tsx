@@ -31,6 +31,7 @@ import {
   STATE_LABEL,
   ageTone,
   formatAge,
+  formatLatency,
   radioState,
 } from "./lib/appearance";
 import { layoutTopology } from "./lib/layout";
@@ -183,6 +184,7 @@ function useRadios(agentId: string | undefined, appKey: string | undefined) {
           rxRateMbps: num(tags.rx_rate),
           txThroughputKbps: num(tags.tx_throughput),
           rxThroughputKbps: num(tags.rx_throughput),
+          latencyMs: num(tags.latency),
           lastSeenMs,
           lastUpdated,
         });
@@ -204,7 +206,7 @@ function Legend() {
   return (
     <div className="flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
       <span className="font-medium">Link SNR</span>
-      {(["excellent", "good", "fair", "poor", "unknown"] as const).map((health) => (
+      {(["excellent", "good", "fair", "poor"] as const).map((health) => (
         <span key={health} className="flex items-center gap-1">
           <span
             className="inline-block h-[3px] w-5 rounded-full"
@@ -213,7 +215,17 @@ function Legend() {
           {health}
         </span>
       ))}
-      <span className="ml-2">· thickness = throughput · dashed = declared or LAN</span>
+      <span className="flex items-center gap-1">
+        <span
+          className="inline-block h-[3px] w-5 rounded-full"
+          style={{ background: HEALTH_COLOUR.unknown }}
+        />
+        neither end reporting (?)
+      </span>
+      <span className="ml-2">
+        · label: latency, then SNR and throughput · thickness = throughput ·
+        dashed = declared or unverified
+      </span>
     </div>
   );
 }
@@ -236,6 +248,7 @@ function DetailPanel({ radio, onClose }: { radio: Radio; onClose: () => void }) 
     ["Radio MAC", radio.radioMac],
     ["Peer (ap_mac)", radio.apMac ?? radio.uplinkMac],
     ["Frequency", radio.frequencyMhz ? `${Math.round(radio.frequencyMhz)} MHz` : null],
+    ["Latency", formatLatency(radio.latencyMs)],
     ["Signal", radio.signalDbm !== null ? `${radio.signalDbm} dBm` : null],
     ["Noise floor", radio.noiseDbm !== null ? `${radio.noiseDbm} dBm` : null],
     ["SNR", radio.snrDb !== null ? `${radio.snrDb} dB` : null],
@@ -467,10 +480,14 @@ function NetworkOverviewWidgetInner({ uiElement }: { uiElement?: UiRemoteCompone
     (r) => r.lastSeenMs === null || nowMs - r.lastSeenMs >= staleAfterMs,
   ).length;
   const fleetTone = ageTone(freshestAgeMs, staleAfterMs);
-  const worst = wireless
+  // Only hops someone is actually observing. A stale SNR from a link that went
+  // dark is not the fleet's worst link, it is an unknown one.
+  const observed = wireless.filter((l) => !l.unreachable);
+  const worst = observed
     .map((l) => l.snrDb)
     .filter((v): v is number => v !== null)
     .sort((a, b) => a - b)[0];
+  const unknownLinks = wireless.length - observed.length;
   const selectedRadio = radios.find((r) => r.id === selected) ?? null;
 
   return (
@@ -482,6 +499,11 @@ function NetworkOverviewWidgetInner({ uiElement }: { uiElement?: UiRemoteCompone
         {worst !== undefined && (
           <Badge style={{ background: HEALTH_COLOUR[healthOf(worst)], color: "white" }}>
             worst link {Math.round(worst)} dB
+          </Badge>
+        )}
+        {unknownLinks > 0 && (
+          <Badge style={{ background: HEALTH_COLOUR.unknown, color: "white" }}>
+            {unknownLinks} link{unknownLinks === 1 ? "" : "s"} unobserved
           </Badge>
         )}
         {oldestAgeMs !== null && (

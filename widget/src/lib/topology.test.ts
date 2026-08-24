@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { ageTone, formatAge } from "./appearance";
+import { ageTone, formatAge, formatLatency, linkHealth } from "./appearance";
 import {
   buildTopology,
   healthOf,
@@ -34,6 +34,7 @@ function radio(partial: Partial<Radio> & Pick<Radio, "id" | "agentId" | "appKey"
     rxRateMbps: null,
     txThroughputKbps: null,
     rxThroughputKbps: null,
+    latencyMs: null,
     lastSeenMs: null,
     lastUpdated: null,
     ...partial,
@@ -286,5 +287,79 @@ describe("ageTone", () => {
   it("treats a reading past the window, or no reading at all, as stale", () => {
     expect(ageTone(11 * 60_000, window)).toBe("stale");
     expect(ageTone(null, window)).toBe("stale");
+  });
+});
+
+// ---------------------------------------------- latency and unobserved links
+
+describe("link latency and reachability", () => {
+  const reporting = { online: true, agentOnline: true, stale: false };
+  const silent = { online: false, agentOnline: true, stale: true };
+
+  it("carries the station's latency onto the hop", () => {
+    const sta = radio({ id: "a:sta", agentId: "a", appKey: "up", radioMac: STA_MAC, apMac: AP_MAC, latencyMs: 12, ...reporting });
+    const ap = radio({ id: "b:ap", agentId: "b", appKey: "down", radioMac: AP_MAC, ...reporting });
+
+    const [link] = buildTopology([sta, ap]).links;
+    expect(link.latencyMs).toBe(12);
+    expect(link.unreachable).toBe(false);
+  });
+
+  it("keeps the AP's own view of latency alongside the station's", () => {
+    const sta = radio({ id: "a:sta", agentId: "a", appKey: "up", radioMac: STA_MAC, apMac: AP_MAC, latencyMs: 12, ...reporting });
+    const ap = radio({
+      id: "b:ap", agentId: "b", appKey: "down", radioMac: AP_MAC, ...reporting,
+      stations: [station(STA_MAC, { latency_ms: 31 })],
+    });
+
+    const [link] = buildTopology([sta, ap]).links;
+    expect(link.latencyMs).toBe(12);
+    expect(link.apSideLatencyMs).toBe(31);
+  });
+
+  it("marks a hop unobserved only when BOTH ends have gone quiet", () => {
+    const sta = radio({ id: "a:sta", agentId: "a", appKey: "up", radioMac: STA_MAC, apMac: AP_MAC, ...silent });
+    const ap = radio({ id: "b:ap", agentId: "b", appKey: "down", radioMac: AP_MAC, ...silent });
+
+    const [link] = buildTopology([sta, ap]).links;
+    expect(link.unreachable).toBe(true);
+  });
+
+  it("still trusts a hop one end can see", () => {
+    // The AP is up and reports the station as associated, so the link is
+    // observed even though the station itself has stopped answering.
+    const sta = radio({ id: "a:sta", agentId: "a", appKey: "up", radioMac: STA_MAC, apMac: AP_MAC, ...silent });
+    const ap = radio({
+      id: "b:ap", agentId: "b", appKey: "down", radioMac: AP_MAC, ...reporting,
+      stations: [station(STA_MAC, { signal_dbm: -61 })],
+    });
+
+    const [link] = buildTopology([sta, ap]).links;
+    expect(link.unreachable).toBe(false);
+  });
+});
+
+describe("linkHealth", () => {
+  it("is unknown when nobody is observing, whatever the last SNR was", () => {
+    // The trap: an excellent last-known SNR on a link that has gone dark would
+    // otherwise paint bright green and assert the hop is fine right now.
+    expect(linkHealth({ unreachable: true, snrDb: 59 } as never)).toBe("unknown");
+  });
+
+  it("bands by SNR while the hop is observed", () => {
+    expect(linkHealth({ unreachable: false, snrDb: 59 } as never)).toBe("excellent");
+    expect(linkHealth({ unreachable: false, snrDb: 4 } as never)).toBe("poor");
+  });
+});
+
+describe("formatLatency", () => {
+  it("keeps a decimal where single-digit differences matter", () => {
+    expect(formatLatency(2.4)).toBe("2.4 ms");
+    expect(formatLatency(47.6)).toBe("48 ms");
+  });
+
+  it("has no answer rather than a misleading zero", () => {
+    expect(formatLatency(null)).toBeNull();
+    expect(formatLatency(-1)).toBeNull();
   });
 });

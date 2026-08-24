@@ -221,6 +221,18 @@ renders confidently instead of erroring.
   * A banner names the freshest reading anywhere: if even that is old, every
     green node is a claim about the past.
   `stale_after_minutes` defaults to 5 — ten polls at the AirMax default of 30 s.
+- **Latency is the headline link figure, SNR and throughput support it.** A hop
+  can hold an excellent SNR and still be unusable if it is queueing, so
+  round-trip time is what says whether traffic is actually getting through. The
+  label falls back to SNR when a radio is on a release that does not publish
+  `latency`, so a half-upgraded fleet still labels every hop.
+- **A hop nobody is observing is grey with a `?`, never green.** `linkHealth`
+  returns `unknown` when both ends have stopped reporting, whatever the last SNR
+  was — colouring it by a stale reading asserts the link is fine *now*, which is
+  the one thing that cannot be known. One end still reporting is enough to trust
+  it: an AP that can see the station observes the hop even if the station has
+  gone quiet. The summary's "worst link" ignores unobserved hops for the same
+  reason.
 - **Edge labels carry two values, and sit above the node layer.** React Flow
   paints nodes over `.react-flow__edgelabel-renderer`, so a five-stat pill
   between two boxes had its middle covered and read as two broken fragments.

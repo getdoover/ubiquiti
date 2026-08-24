@@ -38,6 +38,7 @@ export interface StationRecord {
   ccq_pct?: number | null;
   tx_rate_mbps?: number | null;
   rx_rate_mbps?: number | null;
+  latency_ms?: number | null;
   uptime_s?: number | null;
   distance_m?: number | null;
 }
@@ -77,6 +78,7 @@ export interface Radio {
   rxRateMbps: number | null;
   txThroughputKbps: number | null;
   rxThroughputKbps: number | null;
+  latencyMs: number | null;
   /** When the app last actually reached this radio, ms since epoch.
    *
    * The single most important field on the card. Every other value is a
@@ -106,10 +108,27 @@ export interface Link {
   rxRateMbps: number | null;
   txThroughputKbps: number | null;
   rxThroughputKbps: number | null;
+  /** Round-trip time over the air. The headline figure: a link can hold a
+   * healthy SNR and still be unusable if it is queueing. */
+  latencyMs: number | null;
 
   /** The AP's view of the same station, when it reported one. */
   apSideSignalDbm: number | null;
   apSideCcqPct: number | null;
+  apSideLatencyMs: number | null;
+
+  /**
+   * Neither end is currently reporting, so every figure on this link is a
+   * memory. Kept separate from the health bands: a hop with no data is not a
+   * *bad* hop, it is an unknown one, and colouring it by a stale SNR would
+   * assert something we cannot know.
+   */
+  unreachable: boolean;
+}
+
+/** Do we have current data for this radio? */
+export function isReporting(radio: Radio): boolean {
+  return radio.online && radio.agentOnline && !radio.stale;
 }
 
 export type Health = "excellent" | "good" | "fair" | "poor" | "unknown";
@@ -157,6 +176,7 @@ function stationSideStats(radio: Radio) {
     rxRateMbps: radio.rxRateMbps,
     txThroughputKbps: radio.txThroughputKbps,
     rxThroughputKbps: radio.rxThroughputKbps,
+    latencyMs: radio.latencyMs,
   };
 }
 
@@ -222,6 +242,8 @@ export function buildTopology(input: Radio[]): Topology {
       ...stationSideStats(radio),
       apSideSignalDbm: null,
       apSideCcqPct: null,
+      apSideLatencyMs: null,
+      unreachable: !isReporting(radio) && !isReporting(peer),
     });
   }
 
@@ -240,6 +262,10 @@ export function buildTopology(input: Radio[]): Topology {
         // adding a second edge.
         existing.apSideSignalDbm = station.signal_dbm ?? null;
         existing.apSideCcqPct = station.ccq_pct ?? null;
+        existing.apSideLatencyMs = station.latency_ms ?? null;
+        // The AP is a second observer: if it can see the station, the hop is
+        // not unobserved even when the station itself has gone quiet.
+        if (isReporting(ap)) existing.unreachable = false;
         continue;
       }
       links.set(key, {
@@ -251,6 +277,8 @@ export function buildTopology(input: Radio[]): Topology {
         ...stationSideStats(peer),
         apSideSignalDbm: station.signal_dbm ?? null,
         apSideCcqPct: station.ccq_pct ?? null,
+        apSideLatencyMs: station.latency_ms ?? null,
+        unreachable: !isReporting(peer) && !isReporting(ap),
       });
     }
   }
@@ -289,8 +317,11 @@ export function buildTopology(input: Radio[]): Topology {
         rxRateMbps: null,
         txThroughputKbps: null,
         rxThroughputKbps: null,
+        latencyMs: null,
         apSideSignalDbm: null,
         apSideCcqPct: null,
+        apSideLatencyMs: null,
+        unreachable: !isReporting(source) && !isReporting(target),
       });
     }
   }

@@ -38,6 +38,7 @@ function radio(id: string, agentId: string, mac: string, apMac?: string): Radio 
     rxRateMbps: null,
     txThroughputKbps: null,
     rxThroughputKbps: null,
+    latencyMs: null,
     lastSeenMs: null,
     lastUpdated: null,
   };

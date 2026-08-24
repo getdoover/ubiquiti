@@ -1,16 +1,24 @@
 import { memo } from "react";
 import { BaseEdge, EdgeLabelRenderer, getSmoothStepPath, type EdgeProps } from "@xyflow/react";
 
-import { HEALTH_COLOUR, edgeWidth, formatThroughput } from "../lib/appearance";
-import { healthOf, type Link } from "../lib/topology";
+import {
+  HEALTH_COLOUR,
+  edgeWidth,
+  formatLatency,
+  formatThroughput,
+  linkHealth,
+} from "../lib/appearance";
+import type { Link } from "../lib/topology";
 
 /**
  * One hop.
  *
  * A LAN link is drawn thin and dashed with no label: the two radios are cabled
- * together in the same cabinet and there is nothing to measure. An RF hop gets
- * the reference's treatment — coloured by SNR band, thickened by throughput,
- * with a stat pill sitting on the line.
+ * together in the same cabinet and there is nothing to measure. An RF hop is
+ * coloured by SNR band, thickened by throughput, and labelled with **latency
+ * first** — a link can hold a healthy SNR and still be unusable if it is
+ * queueing, so round-trip time is the figure that actually says whether traffic
+ * is getting through. SNR and throughput sit underneath as the supporting pair.
  */
 function LinkEdgeInner({
   id,
@@ -43,19 +51,32 @@ function LinkEdgeInner({
     );
   }
 
-  const health = healthOf(link.snrDb);
+  const health = linkHealth(link);
   const colour = HEALTH_COLOUR[health];
+  const latency = formatLatency(link.latencyMs);
   const throughput =
     formatThroughput(link.rxThroughputKbps) ?? formatThroughput(link.txThroughputKbps);
+  const snr = link.snrDb !== null ? `${Math.round(link.snrDb)} dB` : null;
 
-  // Two values on the pill, not five. The gap between two device boxes is about
-  // 156px; the previous label ran to roughly 260px, so its middle disappeared
-  // behind the boxes and it read as two broken fragments. Everything else is a
-  // hover away.
-  const headline = link.snrDb !== null ? `${Math.round(link.snrDb)} dB` : link.declared ? "declared" : "no data";
+  // Headline. Latency when we have it; SNR while the fleet is still on a
+  // release that does not publish latency; a question mark when neither end is
+  // reporting, because then no figure here describes the present.
+  let headline: string;
+  if (link.unreachable) headline = "?";
+  else if (latency) headline = latency;
+  else if (snr) headline = snr;
+  else headline = link.declared ? "declared" : "no data";
+
+  // The supporting pair, minus whatever was promoted to the headline.
+  const secondary = [headline === snr ? null : snr, throughput].filter(Boolean).join(" · ");
 
   const full: string[] = [];
-  if (link.snrDb !== null) full.push(`SNR ${Math.round(link.snrDb)} dB`);
+  if (link.unreachable) full.push("Both ends unreachable — figures below are the last known");
+  if (latency) full.push(`latency ${latency}`);
+  if (link.apSideLatencyMs !== null) {
+    full.push(`AP side ${formatLatency(link.apSideLatencyMs)}`);
+  }
+  if (snr) full.push(`SNR ${snr}`);
   if (link.signalDbm !== null) full.push(`signal ${Math.round(link.signalDbm)} dBm`);
   if (link.apSideSignalDbm !== null) full.push(`AP side ${Math.round(link.apSideSignalDbm)} dBm`);
   if (link.ccqPct !== null) full.push(`CCQ ${Math.round(link.ccqPct)}%`);
@@ -73,8 +94,10 @@ function LinkEdgeInner({
         style={{
           stroke: colour,
           strokeWidth: edgeWidth(link),
-          // A declared uplink is inferred from config, not observed on air.
-          strokeDasharray: link.declared ? "6 4" : undefined,
+          // Declared-not-observed, or nobody reporting: either way the line is
+          // an assertion we cannot currently back up, so it is not drawn solid.
+          strokeDasharray: link.declared || link.unreachable ? "6 4" : undefined,
+          opacity: link.unreachable ? 0.75 : 1,
         }}
       />
       <EdgeLabelRenderer>
@@ -84,13 +107,12 @@ function LinkEdgeInner({
           style={{
             transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
             background: colour,
-            // Hoverable, so the full stats are reachable without a click.
             pointerEvents: "all",
           }}
         >
           <span className="text-[11px] font-semibold tabular-nums">{headline}</span>
-          {throughput && (
-            <span className="text-[9px] font-medium tabular-nums opacity-90">{throughput}</span>
+          {secondary && (
+            <span className="text-[9px] font-medium tabular-nums opacity-90">{secondary}</span>
           )}
         </div>
       </EdgeLabelRenderer>

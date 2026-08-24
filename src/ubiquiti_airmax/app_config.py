@@ -66,11 +66,22 @@ class Override(config.Object):
         "Value",
         name="value",
         default="",
-        description="Literal value, or Jinja2 referencing a variable, e.g. '{{ ssid }}'.",
+        description="Value.",
     )
 
 
 class AirMaxConfig(config.Schema):
+    # Declaration order sets UI position, so this sits first deliberately: it is
+    # the switch that decides whether the app writes to a radio at all.
+    dry_run = config.Boolean(
+        "Dry Run",
+        name="dry_run",
+        default=False,
+        description=(
+            "Report the diff but never write to the radio. Telemetry still works."
+        ),
+    )
+
     # -------------------------------------------------------------- the radio
     mac = config.String(
         "MAC Address",
@@ -90,20 +101,6 @@ class AirMaxConfig(config.Schema):
             "this string — a guard against a MAC typo hitting a real radio."
         ),
     )
-    platform = config.Enum(
-        "Platform",
-        name="platform",
-        choices=["any", "XM", "XW", "TI", "XN", "XC", "WA"],
-        default="any",
-        description=(
-            "Hardware platform the overrides are written for, from the firmware "
-            "string. XM/XW/TI/XN are airMAX M (airOS 6); XC/WA are airMAX AC "
-            "(airOS 8). A radio whose platform disagrees is refused rather than "
-            "pushed to — the same model name ships as different platforms."
-        ),
-    )
-
-    # ------------------------------------------------------------- the config
     overrides = config.Array(
         "Config Overrides",
         name="overrides",
@@ -114,24 +111,7 @@ class AirMaxConfig(config.Schema):
             "Leave empty to run as telemetry-only, with no config changes at all."
         ),
     )
-    variables = config.Object(
-        "Template Variables",
-        name="variables",
-        default={},
-        additional_elements=True,
-        description="Free-form key/value pairs available to the overrides as Jinja2 variables.",
-    )
-
     # ------------------------------------------------------------------ safety
-    dry_run = config.Boolean(
-        "Dry Run",
-        name="dry_run",
-        default=True,
-        description=(
-            "Report the diff but never write to the radio. Telemetry still works. "
-            "Leave on until you have watched it produce a correct diff."
-        ),
-    )
     max_attempts = config.Integer(
         "Max Attempts",
         name="max_attempts",

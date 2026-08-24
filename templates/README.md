@@ -5,9 +5,11 @@ runtime the overrides live in the app's Doover config (Config Overrides) for the
 one radio that install manages; these files are the `key=value` form the bench
 tool reads, and what you transcribe into that list once you're happy with them.
 
-Both use the same renderer: each *value* is rendered as its own Jinja2
-expression, so `radio.1.freq={{ freq }}` in a file and a `radio.1.freq` /
-`{{ freq }}` row in the UI behave identically.
+**The app does no templating.** Override values in app config are literal. These
+files may still use `{{ jinja }}` placeholders with the bench tool's `--var`,
+because a file is a starting point you may reuse across several radios — but
+render it to literals first and transcribe *those*. Pasting a `{{ ... }}` value
+into app config is refused rather than written.
 
 ## Getting the key names right
 
@@ -26,7 +28,8 @@ airos dump --host 192.168.1.20 > /tmp/configured.cfg
 # 3. the diff IS your template
 airos cfgdiff /tmp/factory.cfg /tmp/configured.cfg > templates/my-template.cfg.j2
 
-# 4. parameterise it: replace site-specific values with {{ jinja }} variables
+# 4. optional: parameterise site-specific values as {{ jinja }} for reuse, then
+#    render them out with --var before transcribing into app config
 ```
 
 Do this once per platform you deploy — the platform is the first field of the

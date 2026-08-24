@@ -48,10 +48,15 @@ convergence is a background concern that reports its state.
 - **Overlay, never whole-file.** Overrides are a list of `{key, value}`, not a
   `system.cfg`. Read `/tmp/running.cfg`, apply those keys, write back. Never ship
   a complete config; it drops model-specific keys.
-- **Values render per-key, not per-file.** `render_overlay` runs Jinja2 over each
-  value on its own with `StrictUndefined`, and validates the key against
-  `_VALID_KEY` first. Both the app and the `airos` CLI go through it.
-- **Dry Run defaults on.** It suppresses writes but never telemetry.
+- **Override values are literal.** `build_overlay` does no templating: one install
+  manages one radio, so there is nothing to parameterise. It validates keys
+  against `_VALID_KEY` and **refuses any value containing `{{` or `}}`** — nothing
+  renders those now, so a leftover placeholder would be flashed verbatim.
+  The `airos` CLI still renders `--var` into its own template *files*; that is a
+  bench convenience, so render to literals before transcribing into app config.
+- **Dry Run defaults OFF and is the first config field.** An install exists to
+  converge a radio; defaulting it on meant every new install silently did
+  nothing. It suppresses writes but never telemetry.
 - **Bounded attempts, bounded recovery.** `max_attempts` is the reboot-loop
   guard. A parked radio revives only two ways, both bounded: the intent
   fingerprint changes (operator edited overrides/variables), or
@@ -73,8 +78,9 @@ convergence is a background concern that reports its state.
 - **Config schema:** pydoover only registers elements declared at *class* level.
   Assigning them in `__init__` exports an empty schema — silently. Array items
   are `config.Object` subclasses with an explicit `name=` on every field.
-  A free-form `config.Object` exposes arbitrary keys as synthesised sub-elements,
-  not a dict — see `_object_to_dict` in `application.py`.
+  A free-form `config.Object` exposes arbitrary keys as synthesised sub-elements
+  rather than a dict, so reading one back needs a per-element walk. Nothing uses
+  that shape now — override values are literal, with no variables to substitute.
 - **The pass runs in `main_loop`** at `poll_interval`, wrapped in
   `PASS_TIMEOUT`. It does not block through a reboot — a push returns
   immediately and verification happens on a later pass — so a pass is a discovery
@@ -137,8 +143,10 @@ Captured from a live radio on station-1. Don't re-derive these from docs.
 
 - Firmware string is `2WA.ar934x.v8.7.11...` — a **leading board-revision digit**.
   `/etc/version` shows `2WA.v8.7.11` too. Platform is `WA`; parsing the digit as
-  part of the code made every AC radio resolve to `Platform.UNKNOWN`, which made
-  the template platform guard refuse them all.
+  part of the code made every AC radio resolve to `Platform.UNKNOWN`. Platform is
+  now reported only (tag + UI), never a provisioning gate — the MAC pins the
+  radio and `expected_model` covers a MAC typo — but the parse still has to be
+  right or the UI shows every AC radio as unknown.
 - Discovery replies carry **several `0x02` MAC+IP TLVs**: the LAN address, a
   `169.254/16` link-local, and a secondary bridge on a *different*
   locally-administered MAC (`2a:70:...` vs `28:70:...`). `0x01` is the

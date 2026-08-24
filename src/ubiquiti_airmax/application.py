@@ -40,22 +40,6 @@ log = logging.getLogger(__name__)
 PASS_TIMEOUT = 90.0
 
 
-def _object_to_dict(element) -> dict:
-    """Read a free-form ``config.Object`` back as a plain dict.
-
-    A free-form Object exposes its arbitrary keys as synthesised sub-elements
-    rather than a raw mapping, and an entirely absent key leaves them unset —
-    hence the per-element guard rather than a comprehension.
-    """
-    result = {}
-    for name, sub in getattr(element, "_elements", {}).items():
-        try:
-            result[name] = sub.value
-        except (ValueError, AttributeError):
-            continue
-    return result
-
-
 class AirMaxApplication(Application):
     config_cls = AirMaxConfig
     tags_cls = AirMaxTags
@@ -123,12 +107,10 @@ class AirMaxApplication(Application):
         self.provisioner.load(
             TargetSpec(
                 mac=mac,
-                platform=self.config.platform.value,
                 overrides=[
                     Override(key=o.key.value, value=o.val.value)
                     for o in self.config.overrides.elements
                 ],
-                variables=_object_to_dict(self.config.variables),
                 expected_model=self.config.expected_model.value,
             )
         )

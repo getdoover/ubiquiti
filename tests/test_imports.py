@@ -26,7 +26,13 @@ def test_config_schema_exports():
         "overrides",
     ):
         assert key in props, f"{key} missing from exported config schema"
-    assert props["dry_run"]["default"] is True, "dry run must default to on"
+    # Deliberately off: an install exists to converge a radio, and leaving it on
+    # by default meant every new install silently did nothing.
+    assert props["dry_run"]["default"] is False
+    # Ordered first on purpose — it is the switch that decides whether the app
+    # writes to a radio at all.
+    assert next(iter(props)) == "dry_run", "Dry Run must be the first config field"
+    assert "variables" not in props, "template variables were removed"
     # The radio this install manages is the one thing an operator must supply.
     assert schema["required"] == ["mac"]
 

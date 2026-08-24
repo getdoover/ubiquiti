@@ -26,10 +26,9 @@ import re
 import time
 from dataclasses import dataclass, field
 
-from jinja2 import StrictUndefined, Template as JinjaTemplate, TemplateError
 from ubiquiti_common import cfg, netif
 from ubiquiti_common.airos import AirOSClient, AirOSError, Credential, probe
-from ubiquiti_common.models import DiscoveredDevice, Platform, normalise_mac
+from ubiquiti_common.models import DiscoveredDevice, normalise_mac
 from ubiquiti_common.telemetry import Telemetry, ThroughputTracker
 
 from .app_state import TargetRecord, TargetState
@@ -51,15 +50,19 @@ class Override:
 
 
 class OverlayError(ValueError):
-    """A template could not be turned into a valid config overlay."""
+    """The overrides could not be turned into a valid config overlay."""
 
 
-def render_overlay(overrides: list[Override], variables: dict[str, str]) -> cfg.Config:
-    """Render a list of key overrides into a config overlay.
+def build_overlay(overrides: list[Override]) -> cfg.Config:
+    """Turn a list of key overrides into a config overlay.
 
-    Each *value* is rendered as its own Jinja2 expression. ``StrictUndefined`` on
-    purpose: a typo'd variable must fail loudly here, not silently render an
-    empty value into a config about to be written to flash.
+    Values are **literal**. One install manages one radio, so there is nothing to
+    parameterise — the value written is the value typed.
+
+    A value still containing ``{{ }}`` is refused rather than written. Nothing
+    renders it any more, so it would otherwise be flashed verbatim: an override of
+    ``netconf.3.ip={{ ip }}`` would cost the radio its address on next boot, and
+    the config would never converge.
     """
     result: cfg.Config = {}
     for override in overrides:
@@ -68,18 +71,17 @@ def render_overlay(overrides: list[Override], variables: dict[str, str]) -> cfg.
             continue
         if not _VALID_KEY.match(key):
             raise OverlayError(f"invalid airOS config key {key!r}")
-        try:
-            result[key] = JinjaTemplate(
-                override.value or "", undefined=StrictUndefined
-            ).render(**variables)
-        except TemplateError as exc:
-            raise OverlayError(f"{key}: {exc}") from exc
+        value = override.value or ""
+        if "{{" in value or "}}" in value:
+            raise OverlayError(
+                f"{key}: value {value!r} looks like a leftover template "
+                "placeholder. Values are literal — write the actual value."
+            )
+        result[key] = value
     return result
 
 
-def intent_fingerprint(
-    overrides: list[Override], variables: dict[str, str], platform: str
-) -> str:
+def intent_fingerprint(overrides: list[Override]) -> str:
     """Stable hash of the desired config.
 
     Hashes the *inputs* rather than the rendered output so it can never raise —
@@ -88,8 +90,6 @@ def intent_fingerprint(
     payload = json.dumps(
         {
             "overrides": sorted((o.key, o.value) for o in overrides),
-            "variables": sorted(variables.items()),
-            "platform": platform,
         },
         sort_keys=True,
     )
@@ -118,15 +118,8 @@ class TargetSpec:
     """The one radio this app install is responsible for."""
 
     mac: str
-    platform: str = "any"
     overrides: list[Override] = field(default_factory=list)
-    variables: dict[str, str] = field(default_factory=dict)
     expected_model: str = ""
-
-    def matches_platform(self, platform: Platform) -> bool:
-        if self.platform in ("", "any"):
-            return True
-        return self.platform.upper() == platform.value
 
 
 class Provisioner:
@@ -159,7 +152,7 @@ class Provisioner:
             self.record = TargetRecord(mac=mac)
             self.throughput.reset()
 
-        fingerprint = intent_fingerprint(spec.overrides, spec.variables, spec.platform)
+        fingerprint = intent_fingerprint(spec.overrides)
         if self.record.intent and self.record.intent != fingerprint:
             # New intent from the operator: clear the attempt count so an edited
             # config gets a fresh set of tries even from a parked state.
@@ -237,19 +230,11 @@ class Provisioner:
                 )
                 return "model guard failed"
 
-        if not spec.matches_platform(device.platform):
-            record.transition(
-                TargetState.FAILED,
-                f"overrides are declared for platform {spec.platform}, "
-                f"radio is {device.platform.value}",
-            )
-            return "platform mismatch"
-
         try:
-            desired = render_overlay(spec.overrides, spec.variables)
-        except (OverlayError, TemplateError) as exc:
-            record.transition(TargetState.FAILED, f"render failed: {exc}")
-            return f"render failed: {exc}"
+            desired = build_overlay(spec.overrides)
+        except OverlayError as exc:
+            record.transition(TargetState.FAILED, f"invalid overrides: {exc}")
+            return f"invalid overrides: {exc}"
 
         # --- talk to the radio ----------------------------------------------
         if settings.manage_addresses:

@@ -524,6 +524,320 @@
                     "defaultOpen": false
                 }
             }
+        },
+        "config_schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "$id": "",
+            "title": "$default",
+            "type": "object",
+            "properties": {
+                "dry_run": {
+                    "title": "Dry Run",
+                    "x-name": "dry_run",
+                    "x-hidden": false,
+                    "type": [
+                        "boolean",
+                        "null"
+                    ],
+                    "x-required": false,
+                    "description": "Report the diff but never write to the radio. Telemetry still works.",
+                    "default": false,
+                    "x-position": 0
+                },
+                "mac": {
+                    "title": "MAC Address",
+                    "x-name": "mac",
+                    "x-hidden": false,
+                    "type": "string",
+                    "x-required": true,
+                    "description": "The radio this install manages. Accepts 04:18:D6:AA:BB:CC, 04-18-d6-aa-bb-cc or 0418d6aabbcc. Run 'airos discover' to find it \u2014 the number on the device label is a serial, not a MAC.",
+                    "x-position": 1
+                },
+                "expected_model": {
+                    "title": "Expected Model",
+                    "x-name": "expected_model",
+                    "x-hidden": false,
+                    "type": [
+                        "string",
+                        "null"
+                    ],
+                    "x-required": false,
+                    "description": "Optional. Provisioning is refused unless the discovered model contains this string \u2014 a guard against a MAC typo hitting a real radio.",
+                    "default": "",
+                    "x-position": 2
+                },
+                "overrides": {
+                    "title": "Config Overrides",
+                    "x-name": "overrides",
+                    "x-hidden": false,
+                    "type": [
+                        "array",
+                        "null"
+                    ],
+                    "x-required": false,
+                    "description": "The airOS keys to set. Everything else on the radio is left alone. Leave empty to run as telemetry-only, with no config changes at all.",
+                    "default": [],
+                    "x-position": 3,
+                    "items": {
+                        "title": "Override",
+                        "x-name": "override",
+                        "x-hidden": false,
+                        "type": "object",
+                        "x-required": true,
+                        "properties": {
+                            "key": {
+                                "title": "Key",
+                                "x-name": "key",
+                                "x-hidden": false,
+                                "type": "string",
+                                "x-required": true,
+                                "description": "airOS config key, e.g. 'radio.1.freq' or 'netconf.1.ip'. Dotted and 1-indexed where it represents a list.",
+                                "x-position": 1
+                            },
+                            "value": {
+                                "title": "Value",
+                                "x-name": "value",
+                                "x-hidden": false,
+                                "type": [
+                                    "string",
+                                    "null"
+                                ],
+                                "x-required": false,
+                                "description": "Value.",
+                                "default": "",
+                                "x-position": 2
+                            }
+                        },
+                        "additionalElements": true,
+                        "required": [
+                            "key"
+                        ],
+                        "x-collapsible": true,
+                        "x-defaultCollapsed": false
+                    }
+                },
+                "max_attempts": {
+                    "title": "Max Attempts",
+                    "x-name": "max_attempts",
+                    "x-hidden": false,
+                    "type": [
+                        "integer",
+                        "null"
+                    ],
+                    "x-required": false,
+                    "description": "After this many failed pushes the radio is parked and left alone. This is what stops a config that never converges becoming a reboot loop.",
+                    "default": 3,
+                    "x-position": 4,
+                    "minimum": 1,
+                    "maximum": 20
+                },
+                "retry_backoff": {
+                    "title": "Retry Backoff (s)",
+                    "x-name": "retry_backoff",
+                    "x-hidden": false,
+                    "type": [
+                        "integer",
+                        "null"
+                    ],
+                    "x-required": false,
+                    "description": "Minimum wait before retrying after a failed attempt.",
+                    "default": 300,
+                    "x-position": 5,
+                    "minimum": 10
+                },
+                "failed_retry_after": {
+                    "title": "Failed Retry After (s)",
+                    "x-name": "failed_retry_after",
+                    "x-hidden": false,
+                    "type": [
+                        "integer",
+                        "null"
+                    ],
+                    "x-required": false,
+                    "description": "How long a parked radio waits before trying again, so a transient failure heals itself. 0 means never retry. Editing the overrides or variables also clears a parked radio immediately.",
+                    "default": 3600,
+                    "x-position": 6,
+                    "minimum": 0
+                },
+                "interface": {
+                    "title": "Provisioning Interface",
+                    "x-name": "interface",
+                    "x-hidden": false,
+                    "type": [
+                        "string",
+                        "null"
+                    ],
+                    "x-required": false,
+                    "description": "LAN interface to discover and provision on. MUST NOT be the interface carrying this device's default route \u2014 the app refuses to start if it is.",
+                    "default": "eth0",
+                    "x-position": 7
+                },
+                "manage_addresses": {
+                    "title": "Manage Interface Addresses",
+                    "x-name": "manage_addresses",
+                    "x-hidden": false,
+                    "type": [
+                        "boolean",
+                        "null"
+                    ],
+                    "x-required": false,
+                    "description": "Temporarily add a secondary address so a factory radio on 192.168.1.20 is reachable from another subnet. Needs NET_ADMIN. Removed again after each attempt.",
+                    "default": true,
+                    "x-position": 8
+                },
+                "poll_interval": {
+                    "title": "Poll Interval (s)",
+                    "x-name": "poll_interval",
+                    "x-hidden": false,
+                    "type": [
+                        "integer",
+                        "null"
+                    ],
+                    "x-required": false,
+                    "description": "How often to sweep for the radio and read its telemetry. Also the resolution of the graphs in the UI.",
+                    "default": 30,
+                    "x-position": 9,
+                    "minimum": 5
+                },
+                "discovery_timeout": {
+                    "title": "Discovery Timeout (s)",
+                    "x-name": "discovery_timeout",
+                    "x-hidden": false,
+                    "type": [
+                        "number",
+                        "null"
+                    ],
+                    "x-required": false,
+                    "description": "How long to listen for discovery replies each sweep.",
+                    "default": 3.0,
+                    "x-position": 10
+                },
+                "reboot_wait": {
+                    "title": "Reboot Wait (s)",
+                    "x-name": "reboot_wait",
+                    "x-hidden": false,
+                    "type": [
+                        "integer",
+                        "null"
+                    ],
+                    "x-required": false,
+                    "description": "How long to wait for the radio to come back after a reboot before verifying. It returns on its NEW address, which discovery re-finds.",
+                    "default": 120,
+                    "x-position": 11,
+                    "minimum": 30
+                },
+                "ssh_port": {
+                    "title": "SSH Port",
+                    "x-name": "ssh_port",
+                    "x-hidden": false,
+                    "type": [
+                        "integer",
+                        "null"
+                    ],
+                    "x-required": false,
+                    "default": 22,
+                    "x-position": 12
+                },
+                "credentials": {
+                    "title": "Credentials",
+                    "x-name": "credentials",
+                    "x-hidden": false,
+                    "type": [
+                        "array",
+                        "null"
+                    ],
+                    "x-required": false,
+                    "description": "Tried in order until one authenticates.",
+                    "default": [
+                        {
+                            "username": "ubnt",
+                            "password": "ubnt",
+                            "label": "factory default"
+                        }
+                    ],
+                    "x-position": 13,
+                    "items": {
+                        "title": "Credential",
+                        "x-name": "credential",
+                        "x-hidden": false,
+                        "type": "object",
+                        "x-required": true,
+                        "properties": {
+                            "username": {
+                                "title": "Username",
+                                "x-name": "username",
+                                "x-hidden": false,
+                                "type": [
+                                    "string",
+                                    "null"
+                                ],
+                                "x-required": false,
+                                "default": "ubnt",
+                                "x-position": 1
+                            },
+                            "password": {
+                                "title": "Password",
+                                "x-name": "password",
+                                "x-hidden": false,
+                                "type": [
+                                    "string",
+                                    "null"
+                                ],
+                                "x-required": false,
+                                "default": "ubnt",
+                                "x-position": 2
+                            },
+                            "label": {
+                                "title": "Label",
+                                "x-name": "label",
+                                "x-hidden": false,
+                                "type": [
+                                    "string",
+                                    "null"
+                                ],
+                                "x-required": false,
+                                "description": "Optional note, e.g. 'factory default' or 'site standard'.",
+                                "default": "",
+                                "x-position": 3
+                            }
+                        },
+                        "additionalElements": true,
+                        "required": [],
+                        "x-collapsible": true,
+                        "x-defaultCollapsed": false
+                    }
+                },
+                "verify_exclude": {
+                    "title": "Verify Exclude Keys",
+                    "x-name": "verify_exclude",
+                    "x-hidden": false,
+                    "type": [
+                        "array",
+                        "null"
+                    ],
+                    "x-required": false,
+                    "description": "fnmatch patterns for keys that are pushed but not verified, because the radio rewrites them (password hashes, obscured PSKs).",
+                    "default": [
+                        "users.*.password",
+                        "*.psk",
+                        "*.wpa.psk",
+                        "*.key",
+                        "snmp.*.community"
+                    ],
+                    "x-position": 14,
+                    "items": {
+                        "title": "Key Pattern",
+                        "x-name": "pattern",
+                        "x-hidden": false,
+                        "type": "string",
+                        "x-required": true
+                    }
+                }
+            },
+            "additionalElements": true,
+            "required": [
+                "mac"
+            ]
         }
     }
 }

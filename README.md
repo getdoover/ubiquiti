@@ -57,19 +57,20 @@ it has already decided about.
 **Overlay, not whole-file.** Overrides are a list of airOS keys to set. The app
 reads the radio's live `/tmp/running.cfg`, applies only those keys, and writes it
 back, so everything model- and firmware-specific (chain counts, calibration,
-per-platform defaults) is preserved. Each override's *value* is a Jinja2
-expression rendered against the install's variables, which lets a Solution share
-one override set across many radios while each install supplies its own values:
+per-platform defaults) is preserved. Values are **literal** — one install manages
+one radio, so there is nothing to parameterise:
 
 | Override | Value |
 |---|---|
-| `radio.1.freq` | `{{ freq }}` |
-| `wireless.1.ssid` | `{{ ssid }}` |
-| `wireless.1.security` | `WPA2` |
+| `radio.1.freq` | `5800` |
+| `wireless.1.ssid` | `SPAN-LINK` |
+| `wireless.1.security.type` | `none` |
 
-An undefined variable is an error, not a blank. Keys are validated too:
-whitespace or an embedded `=` is refused rather than written, since a config the
-radio half-reads is worse than one it rejects.
+Both halves are validated before anything is written. A key with whitespace or an
+embedded `=` is refused, since a config the radio half-reads is worse than one it
+rejects. A value still containing `{{ }}` is refused too: nothing renders it, so
+it would be flashed verbatim — an override of `netconf.3.ip={{ ip }}` would cost
+the radio its address on next boot.
 
 ### Scope
 
@@ -92,7 +93,6 @@ the reset button — so the defaults are conservative:
 | **Dry Run** | on | Diff and report; never write. Telemetry still works. |
 | **Max Attempts** | 3 | A radio that never converges is parked instead of rebooting forever. |
 | **Failed Retry After** | 1 h | A parked radio retries once, later, so transient failures self-heal. 0 = never. |
-| Platform guard | — | Overrides declared for one platform are refused on another. |
 | Expected Model | optional | Refuses to provision unless the discovered model matches — catches a MAC typo. |
 | Interface guard | — | The app refuses to start if the provisioning interface carries this device's default route. |
 

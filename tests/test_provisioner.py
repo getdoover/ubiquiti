@@ -17,7 +17,7 @@ from ubiquiti_airmax.app_state import TargetState
 
 FACTORY_CFG = "radio.1.freq=0\nwireless.1.ssid=ubnt\nnetconf.3.ip=192.168.1.12\n"
 MAC = "28:70:4e:e2:9b:cb"
-DEFAULT_OVERRIDES = [prov.Override("radio.1.freq", "{{ freq }}")]
+DEFAULT_OVERRIDES = [prov.Override("radio.1.freq", "5800")]
 
 
 class FakeRadio:
@@ -86,9 +86,7 @@ def device(
     return DiscoveredDevice(mac=mac, ip=ip, firmware=firmware, model=model)
 
 
-def make(
-    overrides=None, variables=None, platform="any", expected_model="", **settings_kwargs
-):
+def make(overrides=None, expected_model="", **settings_kwargs):
     settings_kwargs.setdefault("dry_run", False)
     settings_kwargs.setdefault("manage_addresses", False)
     settings_kwargs.setdefault("retry_backoff", 0)
@@ -98,9 +96,7 @@ def make(
     p.load(
         prov.TargetSpec(
             mac=MAC,
-            platform=platform,
             overrides=list(DEFAULT_OVERRIDES) if overrides is None else overrides,
-            variables={"freq": "5800"} if variables is None else variables,
             expected_model=expected_model,
         )
     )
@@ -143,7 +139,7 @@ async def test_bad_mac_in_config_yields_no_target(radio):
 
 
 async def test_already_matching_config_converges_without_writing(radio):
-    p = make(variables={"freq": "0"})  # FACTORY_CFG already has freq=0
+    p = make(overrides=[prov.Override("radio.1.freq", "0")])  # already 0
     await p.run_pass([device()])
     assert p.state is TargetState.CONVERGED
     assert radio.writes == 0
@@ -236,8 +232,7 @@ async def test_intent_change_revives_a_parked_radio(radio):
     p.load(
         prov.TargetSpec(
             mac=MAC,
-            overrides=[prov.Override("radio.1.freq", "{{ freq }}")],
-            variables={"freq": "5200"},  # different intent
+            overrides=[prov.Override("radio.1.freq", "5200")],  # different intent
         )
     )
     assert p.state is TargetState.PENDING
@@ -260,12 +255,11 @@ async def test_identical_config_reload_does_not_revive_a_parked_radio(radio):
     assert p.state is TargetState.FAILED
     writes = radio.writes
 
-    # Same MAC, same overrides, same variables -> same fingerprint.
+    # Same MAC, same overrides -> same fingerprint.
     p.load(
         prov.TargetSpec(
             mac=MAC,
             overrides=list(DEFAULT_OVERRIDES),
-            variables={"freq": "5800"},
         )
     )
     assert p.state is TargetState.FAILED, "identical config must not unpark"
@@ -275,20 +269,25 @@ async def test_identical_config_reload_does_not_revive_a_parked_radio(radio):
 
 
 async def test_intent_fingerprint_is_stable_for_equivalent_config():
-    a = prov.intent_fingerprint([prov.Override("a", "1")], {"x": "y"}, "WA")
-    b = prov.intent_fingerprint([prov.Override("a", "1")], {"x": "y"}, "WA")
-    c = prov.intent_fingerprint([prov.Override("a", "2")], {"x": "y"}, "WA")
-    d = prov.intent_fingerprint([prov.Override("a", "1")], {"x": "y"}, "XM")
+    a = prov.intent_fingerprint([prov.Override("a", "1")])
+    b = prov.intent_fingerprint([prov.Override("a", "1")])
+    c = prov.intent_fingerprint([prov.Override("a", "2")])
+    d = prov.intent_fingerprint([prov.Override("b", "1")])
     assert a == b
-    assert a != c and a != d
+    assert a != c, "a changed override value must change the fingerprint"
+    assert a != d, "a changed override key must change the fingerprint"
 
 
-async def test_platform_mismatch_is_refused(radio):
-    p = make(platform="XM")  # airOS 6 overrides, airOS 8 radio
+async def test_platform_is_reported_but_no_longer_guarded(radio):
+    """Platform is discovered and published, but does not gate provisioning.
+
+    With one install per radio the MAC already pins the device, so the platform
+    guard was redundant; `expected_model` remains for the MAC-typo case.
+    """
+    p = make()
     await p.run_pass([device()])
-    assert p.state is TargetState.FAILED
-    assert radio.writes == 0
-    assert "platform" in p.record.message
+    assert p.state is TargetState.APPLYING, "a WA radio must not be refused"
+    assert p.record.platform == "WA", "platform is still recorded for the UI"
 
 
 async def test_expected_model_guard_is_refused(radio):
@@ -306,13 +305,6 @@ async def test_expected_model_guard_passes_on_substring(radio):
 
 async def test_invalid_key_fails_without_writing(radio):
     p = make(overrides=[prov.Override("radio.1 freq", "5800")])
-    await p.run_pass([device()])
-    assert p.state is TargetState.FAILED
-    assert radio.writes == 0
-
-
-async def test_undefined_template_variable_fails_loudly(radio):
-    p = make(overrides=[prov.Override("radio.1.freq", "{{ nope }}")], variables={})
     await p.run_pass([device()])
     assert p.state is TargetState.FAILED
     assert radio.writes == 0
@@ -347,7 +339,7 @@ async def test_unhandled_error_does_not_kill_the_pass(radio, monkeypatch):
 
 async def test_telemetry_is_read_even_when_config_matches(radio):
     """Telemetry is why the UI exists — it must publish with no config work."""
-    p = make(variables={"freq": "0"})
+    p = make(overrides=[prov.Override("radio.1.freq", "0")])
     await p.run_pass([device()])
     assert p.state is TargetState.CONVERGED
     assert radio.telemetry_reads == 1
@@ -376,14 +368,13 @@ async def test_telemetry_reports_offline_on_ssh_failure(radio, monkeypatch):
 # --------------------------------------------------------------- overlay render
 
 
-def test_render_overlay_renders_each_value_independently():
-    overlay = prov.render_overlay(
+def test_build_overlay_uses_values_literally():
+    overlay = prov.build_overlay(
         [
-            prov.Override("radio.1.freq", "{{ freq }}"),
-            prov.Override("wireless.1.ssid", "{{ ssid }}"),
+            prov.Override("radio.1.freq", "5800"),
+            prov.Override("wireless.1.ssid", "SPAN-LINK"),
             prov.Override("wireless.1.security.type", "none"),
-        ],
-        {"freq": "5800", "ssid": "SPAN-LINK"},
+        ]
     )
     assert overlay == {
         "radio.1.freq": "5800",
@@ -392,16 +383,16 @@ def test_render_overlay_renders_each_value_independently():
     }
 
 
-def test_render_overlay_allows_an_empty_value():
-    assert prov.render_overlay([prov.Override("unms.uri", "")], {}) == {"unms.uri": ""}
+def test_build_overlay_allows_an_empty_value():
+    assert prov.build_overlay([prov.Override("unms.uri", "")]) == {"unms.uri": ""}
 
 
-def test_render_overlay_skips_blank_keys():
-    assert prov.render_overlay([prov.Override("   ", "x")], {}) == {}
+def test_build_overlay_skips_blank_keys():
+    assert prov.build_overlay([prov.Override("   ", "x")]) == {}
 
 
-def test_render_overlay_strips_surrounding_whitespace_from_keys():
-    assert prov.render_overlay([prov.Override("  radio.1.freq  ", "5800")], {}) == {
+def test_build_overlay_strips_surrounding_whitespace_from_keys():
+    assert prov.build_overlay([prov.Override("  radio.1.freq  ", "5800")]) == {
         "radio.1.freq": "5800"
     }
 
@@ -415,14 +406,26 @@ def test_render_overlay_strips_surrounding_whitespace_from_keys():
         "radio/1/freq",
     ],
 )
-def test_render_overlay_refuses_invalid_keys(key):
+def test_build_overlay_refuses_invalid_keys(key):
     with pytest.raises(prov.OverlayError, match="invalid airOS config key"):
-        prov.render_overlay([prov.Override(key, "5800")], {})
+        prov.build_overlay([prov.Override(key, "5800")])
 
 
-def test_render_overlay_reports_which_key_failed_to_render():
-    with pytest.raises(prov.OverlayError, match="wireless.1.ssid"):
-        prov.render_overlay([prov.Override("wireless.1.ssid", "{{ missing }}")], {})
+@pytest.mark.parametrize(
+    "value", ["{{ ip }}", "{{ssid}}", "prefix-{{ x }}", "}} broken"]
+)
+def test_build_overlay_refuses_leftover_template_placeholders(value):
+    """Nothing renders these any more, so writing one verbatim would flash
+    garbage — e.g. netconf.3.ip={{ ip }} costs the radio its address."""
+    with pytest.raises(prov.OverlayError, match="template placeholder"):
+        prov.build_overlay([prov.Override("netconf.3.ip", value)])
+
+
+async def test_leftover_placeholder_fails_the_target_without_writing(radio):
+    p = make(overrides=[prov.Override("netconf.3.ip", "{{ ip }}")])
+    await p.run_pass([device()])
+    assert p.state is TargetState.FAILED
+    assert radio.writes == 0
 
 
 # ------------------------------------------------- reboot window (realistic)

@@ -53,8 +53,7 @@ class Platform(str, Enum):
 # Note the leading digit on the second one — observed on real Bullet AC IP67
 # hardware. It is a board-revision prefix on the platform token, not part of the
 # platform code, and treating it as part of the code made every AC radio parse as
-# an unknown platform (which in turn made the template platform guard refuse to
-# provision any of them).
+# an unknown platform, which surfaces in the UI as an unknown radio.
 _FIRMWARE_RE = re.compile(
     r"^(?P<prefix>\d*)(?P<platform>[A-Za-z]{2,})\.(?P<chipset>[A-Za-z0-9_-]+)\.v(?P<version>[0-9][0-9.]*)"
 )

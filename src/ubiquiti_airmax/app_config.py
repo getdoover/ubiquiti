@@ -110,6 +110,17 @@ class AirMaxConfig(config.Schema):
             "this string — a guard against a MAC typo hitting a real radio."
         ),
     )
+    uplink_mac = config.String(
+        "Uplink MAC",
+        name="uplink_mac",
+        default="",
+        description=(
+            "Optional. The MAC of the radio this one links up to, for the network "
+            "overview. Leave empty — the link is normally read off the radio "
+            "itself. Set it only when a radio will not report its peer, which "
+            "otherwise leaves it drawn as unconnected."
+        ),
+    )
     overrides = config.Array(
         "Config Overrides",
         name="overrides",

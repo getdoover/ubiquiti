@@ -17,12 +17,14 @@ Design notes worth knowing before changing anything here:
 """
 
 import asyncio
+import json
 import logging
 import time
 
 from pydoover.docker import Application
 from ubiquiti_common import discovery, netif
 from ubiquiti_common.airos import Credential
+from ubiquiti_common.models import mac_or_none
 from ubiquiti_common.telemetry import Telemetry
 
 from .app_config import AirMaxConfig
@@ -211,7 +213,9 @@ class AirMaxApplication(Application):
             len(hosts),
             interface,
         )
-        return await discovery.unicast_probe(hosts, timeout=timeout)
+        # A sweep needs longer than the broadcast listen window: many more
+        # addresses, and replies arriving over a longer tail.
+        return await discovery.unicast_probe(hosts, timeout=max(timeout, 6.0))
 
     # --------------------------------------------------------------- publish
     async def _publish(self) -> None:
@@ -234,6 +238,16 @@ class AirMaxApplication(Application):
             await self.tags.last_seen.set(record.last_seen)
         if record and record.ip:
             await self.tags.ip_address.set(record.ip)
+
+        # Topology identity is published whether or not the radio answered. A
+        # radio that has gone dark is exactly what an operator most wants to see
+        # on the network graph, and it can only be drawn in the right place if it
+        # still reports who it is and what it hangs off. `spec.mac` is the
+        # normalised configured MAC, so a node keeps its place even on the first
+        # pass, before the radio has ever been reached.
+        spec = self.provisioner.spec
+        await self.tags.radio_mac.set(tel.device_mac or (spec.mac if spec else None))
+        await self.tags.uplink_mac.set(mac_or_none(self.config.uplink_mac.value))
 
         if not tel.online:
             # Radio unreachable — leave the telemetry tags at their last value
@@ -280,6 +294,10 @@ class AirMaxApplication(Application):
         await self.tags.station_count.set(tel.station_count)
         await self.tags.stations.set(
             "\n".join(s.describe() for s in tel.stations) or None
+        )
+        # Machine-readable twin, for the network overview's edge labels.
+        await self.tags.stations_json.set(
+            json.dumps([s.to_dict() for s in tel.stations]) if tel.stations else None
         )
         await self.tags.ap_mac.set(tel.ap_mac)
         await self.tags.distance.set(tel.distance_m)

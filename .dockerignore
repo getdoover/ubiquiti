@@ -1,1 +1,19 @@
 .venv
+
+# The AirMax image is built with `COPY . /app`, so anything that belongs only to
+# the network-overview app has to be kept out of its build context. `widget/`
+# matters most: `node_modules` is tens of thousands of files and would be copied
+# into the image as well as slowing every build that touches this repo.
+widget/node_modules
+widget/dist
+widget/assets
+
+# Lambda packaging artefacts for the network-overview app.
+packages_export
+package.zip
+requirements.txt
+
+.git
+.github
+.pytest_cache
+.ruff_cache

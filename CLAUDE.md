@@ -1,10 +1,20 @@
 # Ubiquiti Doover apps
 
-Multi-app repo (leachate-telemetry pattern): one Dockerfile, one image, one
-`doover_config.json` with a key per app, suffixed entry points in
-`pyproject.toml`. Shared device-driver code lives in `packages/ubiquiti_common/`
-as a uv workspace member — put anything reusable there rather than importing
-across app packages.
+Multi-app repo (leachate-telemetry pattern): one `doover_config.json` with a key
+per app, suffixed entry points in `pyproject.toml`. Shared device-driver code
+lives in `packages/ubiquiti_common/` as a uv workspace member — put anything
+reusable there rather than importing across app packages.
+
+**Two deploy kinds live here**, which is why there is both a `Dockerfile` and a
+`build.sh`:
+
+* **`DEV`** — a device app, shipped as a Docker image and run on a Doovit.
+* **`PRO`** — a cloud processor, shipped as a `package.zip` plus a React remote
+  component, run on its own agent.
+
+`doover app discover` tells them apart from the app block (`builds_image` vs
+`builds_package`), and the shared CI workflow runs the right job for each. This
+needs no workflow changes — see **CI and publishing**.
 
 ## Commands
 
@@ -12,15 +22,22 @@ across app packages.
 uv run pytest tests -q
 uv run export-config-airmax     # required after editing app_config.py
 uv run export-ui-airmax         # required after editing app_ui.py
+uv run export-config-overview   # same, for the network-overview app
+uv run export-ui-overview
 uv run airos discover --iface en0
 uv run airos status --host <ip> --raw   # verify telemetry field aliases
+
+doover app discover . --json    # confirm both apps resolve to the right kind
+./build.sh                      # package.zip + widget bundle (processor app)
+npm --prefix widget run typecheck   # rspack strips types, it does not check them
 ```
 
 ## Apps
 
-| App | Entry point | Package |
-|-----|-------------|---------|
-| Ubiquiti AirMax (telemetry + autoconfig) | `doover-app-run-airmax` | `src/ubiquiti_airmax/` |
+| App | Kind | Entry point | Package |
+|-----|------|-------------|---------|
+| Ubiquiti AirMax (telemetry + autoconfig) | `DEV` | `doover-app-run-airmax` | `src/ubiquiti_airmax/` |
+| Ubiquiti Network Overview (fleet link graph) | `PRO` | `ubiquiti_network_overview.handler` | `src/ubiquiti_network_overview/` + `widget/` |
 
 ## Start here
 
@@ -99,6 +116,36 @@ convergence is a background concern that reports its state.
   The genuine risk is *subnet overlap* — a helper address in a range already
   routed elsewhere — which the old check never detected anyway.
 
+## Ubiquiti Network Overview
+
+`src/ubiquiti_network_overview/` plus `widget/`. One install, on its own agent,
+drawing every airMAX radio in the organisation as a link graph.
+
+The Python side is almost empty on purpose — config, UI schema, and an
+`on_deployment` connection ping. All of it is deliberate:
+
+- **It never talks to a device, and nothing is installed on one for it to work.**
+  It reads the `tag_values` and `doover_connection` aggregates of the devices in
+  `DEVICE_MAP` through the browser's own client. Adding a per-device component
+  would throw that property away.
+- **Topology is computed in the widget, not in a pass here.** Edges change when a
+  radio re-associates, which the widget sees immediately on its live tag
+  subscription. Recomputing on a lambda invocation would be slower *and* staler.
+- **Devices are found via `apps_installed`, not listed by hand.** Point the
+  extended-permissions config at the AirMax app and the platform fills
+  `DEVICE_MAP` with every device running it.
+- **App keys come from `app_installs__name`, never from prefix-matching
+  `tag_values`.** An install's key is operator-chosen — `airmax_upstream`, not
+  `ubiquiti_airmax_1` — so guessing would miss exactly the multi-radio devices
+  this view exists to draw. One Doovit routinely runs an uplink and a downlink.
+- **It hard-depends on the AirMax topology tags** (`radio_mac`, `ap_mac`,
+  `stations_json`, `uplink_mac`). A radio whose install predates them has no
+  identity to draw, so the fleet must be on a release that publishes them.
+  Pinned by `test_topology_tags_are_published`.
+- **The UI schema's `module`/`scope` must match `widget/rsbuild.config.ts`.** A
+  mismatch fails no build — the app publishes, the bundle loads, the panel
+  renders empty. Pinned by `test_overview_ui_module_matches_the_widget_bundle`.
+
 ## Environment facts
 
 - **Config schema:** pydoover only registers elements declared at *class* level.
@@ -163,6 +210,26 @@ registry, set by `doover app migrate` — not ghcr).
 null is what keeps the app public and unowned. Do not delete the key — a missing
 one fails publish with `{"organisation_id":["This field is required."]}`.
 
+The processor app needs **no workflow change**: the shared workflow's
+`publish-package` job fans out over whatever `doover app discover` reports as
+`builds_package`, runs `./build.sh`, and uploads the zip. Verify a change to the
+app blocks with `doover app discover . --json` — `ubiquiti_airmax` must come back
+`builds_image: true` and `ubiquiti_network_overview` `builds_package: true,
+widget: true`.
+
+**`build.sh` deliberately does not zip `src/`.** `uv export` emits the project
+itself as a non-editable dependency, so `uv pip install --target packages_export`
+already vendors `ubiquiti_network_overview/` as a real package — hence the
+handler is `ubiquiti_network_overview.handler`, not `src.…`. Adding `zip
+package.zip src` on top puts a second copy of every module in the archive and
+which one imports comes down to `sys.path` order.
+
+The zip is ~9 MB because `uv export` vendors every project dependency, including
+`asyncssh`, `cryptography`, `jinja2` and `transitions` — all of which only the
+AirMax device app uses. Harmless against the lambda size limit; trimming it means
+moving the device-only deps into an optional extra and changing how the
+Dockerfile installs them.
+
 ## Verified hardware facts (Bullet AC IP67, 2026-08-21)
 
 Captured from a live radio on station-1. Don't re-derive these from docs.
@@ -174,10 +241,33 @@ Captured from a live radio on station-1. Don't re-derive these from docs.
   radio and `expected_model` covers a MAC typo — but the parse still has to be
   right or the UI shows every AC radio as unknown.
 - Discovery replies carry **several `0x02` MAC+IP TLVs**: the LAN address, a
-  `169.254/16` link-local, and a secondary bridge on a *different*
-  locally-administered MAC (`2a:70:...` vs `28:70:...`). `0x01` is the
-  authoritative identity; prefer the reply's sender address for reachability.
+  `169.254/16` link-local, and an entry on a *different* locally-administered MAC
+  (`2a:70:...` vs `28:70:...`). `0x01` is the authoritative identity; prefer the
+  reply's sender address for reachability.
   Unknown TLVs still to identify: `0x10`, `0x13` (repeats MAC), `0x18`.
+- **The `2a:70:...` MAC is `ath1`, not a secondary bridge** — corrected
+  2026-08-24 by reading `/sys/class/net/*/address` on a live radio. The full set
+  on a Bullet AC IP67, and the reason the network graph joins on the MAC it does:
+
+  | Interface | MAC | What it is |
+  |---|---|---|
+  | `ath0` | `28:70:4e:e2:96:b9` | the 5 GHz airMAX link — **same as `deviceId` and the discovery MAC** |
+  | `ath1` | `2a:70:4e:e2:96:b9` | 2.4 GHz management AP, `ESSID:"BulletAC-IP67:<mac>"`, always Master |
+  | `br0`  | `28:70:4e:e2:96:b9` | bridge of eth0 + ath0 |
+  | `eth0` | `28:70:4e:e3:96:b9` | LAN — **fourth octet differs** (`e2` → `e3`) |
+
+  So the identity MAC *is* the wireless MAC: a station's `apMac` (its AP's BSSID)
+  matches that AP's `radio_mac` directly, with no derivation. Reading `eth0` or
+  `ath1` instead would produce an identity nothing ever matches, and every edge
+  in the network graph would silently disappear.
+- **`mca-dump` returns nothing on this firmware.** Every field comes from the
+  flat `mca-status` fallback, so there is no `interfaces[]` array to read and the
+  JSON document's field names in `telemetry.py` are untested against this model.
+  `deviceId` is the radio's own MAC, upper-cased — normalise before comparing.
+- **An unassociated station reports `apMac=00:00:00:00:00:00`.** Confirmed across
+  a bench of seven idle radios. `mac_or_none` maps that to `None`; taken
+  literally it becomes one phantom node that every idle radio in a fleet appears
+  to link to.
 - **`netconf` indexes are per-interface and not stable.** On this model
   `netconf.1`=ath0, `netconf.2`=eth0, `netconf.3`=br0. The LAN IP is on br0.
 - Keys that do NOT exist on airOS 8: `wireless.1.security` (it is

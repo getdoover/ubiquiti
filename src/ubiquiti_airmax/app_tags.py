@@ -58,6 +58,26 @@ class AirMaxTags(Tags):
     ap_mac = Tag("string", default=None, log_on=AnyChange())
     distance = Tag("number", default=None, log_on=Delta(amount=50.0))
 
+    # ---------------------------------------------------------------- topology
+    # What a fleet-wide network view needs to draw this radio and its links.
+    # Published as tags rather than left in each device's deployment config so a
+    # dashboard picks them up in the one batched `tag_values` read it already
+    # does, instead of a per-device config fetch.
+    #
+    # `radio_mac` is the node's identity and, in AP mode, the BSSID a station
+    # reports as its `ap_mac` — so an edge is `station.ap_mac == ap.radio_mac`.
+    # It is published even when the radio is unreachable: a node that has gone
+    # dark still belongs on the graph, and dropping its identity would make it
+    # vanish instead.
+    radio_mac = Tag("string", default=None, log_on=AnyChange())
+    # Operator-declared uplink, for a radio whose firmware will not tell us who
+    # it is associated with. Empty normally.
+    uplink_mac = Tag("string", default=None, log_on=AnyChange())
+    # The machine-readable twin of `stations` above. No `log_on`, matching that
+    # tag: the per-station figures move every pass, so logging it would fill the
+    # historian with a JSON blob nothing queries.
+    stations_json = Tag("string", default=None)
+
     # ------------------------------------------------------------ provisioning
     config_state = Tag("string", default=None, log_on=AnyChange())
     config_message = Tag("string", default=None, log_on=AnyChange())

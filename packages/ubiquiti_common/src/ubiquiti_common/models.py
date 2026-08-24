@@ -115,6 +115,33 @@ def normalise_mac(mac: str) -> str:
     return ":".join(cleaned[i : i + 2] for i in range(0, MAC_HEX_DIGITS, 2))
 
 
+def mac_or_none(value: object) -> str | None:
+    """Tolerant :func:`normalise_mac` for MACs read off a radio, not typed by a person.
+
+    Returns ``None`` instead of raising, because every caller is parsing a
+    telemetry field that is legitimately absent much of the time.
+
+    Two values are deliberately ``None`` rather than an address:
+
+    * **all zeroes** — what airOS reports as ``apMac`` on a station that is not
+      associated. Confirmed on a bench of Bullet AC IP67s, every one idle and
+      every one reporting ``00:00:00:00:00:00``. Treating that as an address
+      makes every unassociated radio in a fleet appear to link to one shared
+      phantom node.
+    * **all ones** — the broadcast address, never a peer.
+    """
+    if value is None:
+        return None
+    try:
+        mac = normalise_mac(str(value))
+    except ValueError:
+        return None
+    digits = mac.replace(":", "")
+    if set(digits) <= {"0"} or set(digits) <= {"f"}:
+        return None
+    return mac
+
+
 @dataclass
 class DiscoveredDevice:
     """One device that answered a UBNT discovery probe.

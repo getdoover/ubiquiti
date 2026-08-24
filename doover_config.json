@@ -580,6 +580,19 @@
                     "default": "",
                     "x-position": 3
                 },
+                "uplink_mac": {
+                    "title": "Uplink MAC",
+                    "x-name": "uplink_mac",
+                    "x-hidden": false,
+                    "type": [
+                        "string",
+                        "null"
+                    ],
+                    "x-required": false,
+                    "description": "Optional. The MAC of the radio this one links up to, for the network overview. Leave empty \u2014 the link is normally read off the radio itself. Set it only when a radio will not report its peer, which otherwise leaves it drawn as unconnected.",
+                    "default": "",
+                    "x-position": 4
+                },
                 "overrides": {
                     "title": "Config Overrides",
                     "x-name": "overrides",
@@ -591,7 +604,7 @@
                     "x-required": false,
                     "description": "The airOS keys to set for THIS radio. Everything else on the radio is left alone. Applied on top of Profile Overrides, so a key set here wins. Leave both empty to run as telemetry-only.",
                     "default": [],
-                    "x-position": 4,
+                    "x-position": 5,
                     "items": {
                         "title": "Override",
                         "x-name": "override",
@@ -641,7 +654,7 @@
                     "x-required": false,
                     "description": "After this many failed pushes the radio is parked and left alone. This is what stops a config that never converges becoming a reboot loop.",
                     "default": 3,
-                    "x-position": 5,
+                    "x-position": 6,
                     "minimum": 1,
                     "maximum": 20
                 },
@@ -656,7 +669,7 @@
                     "x-required": false,
                     "description": "Minimum wait before retrying after a failed attempt.",
                     "default": 300,
-                    "x-position": 6,
+                    "x-position": 7,
                     "minimum": 10
                 },
                 "failed_retry_after": {
@@ -670,7 +683,7 @@
                     "x-required": false,
                     "description": "How long a parked radio waits before trying again, so a transient failure heals itself. 0 means never retry. Editing the overrides or variables also clears a parked radio immediately.",
                     "default": 3600,
-                    "x-position": 7,
+                    "x-position": 8,
                     "minimum": 0
                 },
                 "interface": {
@@ -684,7 +697,7 @@
                     "x-required": false,
                     "description": "LAN interface to discover and provision on. MUST NOT be the interface carrying this device's default route \u2014 the app refuses to start if it is.",
                     "default": "eth0",
-                    "x-position": 8
+                    "x-position": 9
                 },
                 "manage_addresses": {
                     "title": "Manage Interface Addresses",
@@ -697,7 +710,7 @@
                     "x-required": false,
                     "description": "Temporarily add a secondary address so a factory radio on 192.168.1.20 is reachable from another subnet. Needs NET_ADMIN. Removed again after each attempt.",
                     "default": true,
-                    "x-position": 9
+                    "x-position": 10
                 },
                 "poll_interval": {
                     "title": "Poll Interval (s)",
@@ -710,7 +723,7 @@
                     "x-required": false,
                     "description": "How often to sweep for the radio and read its telemetry. Also the resolution of the graphs in the UI.",
                     "default": 30,
-                    "x-position": 10,
+                    "x-position": 11,
                     "minimum": 5
                 },
                 "discovery_timeout": {
@@ -724,7 +737,7 @@
                     "x-required": false,
                     "description": "How long to listen for discovery replies each sweep.",
                     "default": 3.0,
-                    "x-position": 11
+                    "x-position": 12
                 },
                 "reboot_wait": {
                     "title": "Reboot Wait (s)",
@@ -737,7 +750,7 @@
                     "x-required": false,
                     "description": "How long to wait for the radio to come back after a reboot before verifying. It returns on its NEW address, which discovery re-finds.",
                     "default": 120,
-                    "x-position": 12,
+                    "x-position": 13,
                     "minimum": 30
                 },
                 "ssh_port": {
@@ -750,7 +763,7 @@
                     ],
                     "x-required": false,
                     "default": 22,
-                    "x-position": 13
+                    "x-position": 14
                 },
                 "credentials": {
                     "title": "Credentials",
@@ -769,7 +782,7 @@
                             "label": "factory default"
                         }
                     ],
-                    "x-position": 14,
+                    "x-position": 15,
                     "items": {
                         "title": "Credential",
                         "x-name": "credential",
@@ -832,7 +845,7 @@
                     "x-required": false,
                     "description": "Exactly the same as Config Overrides \u2014 airOS keys to set \u2014 but kept as a separate list so a Doover config profile can supply a shared layer without overwriting the per-install one. Put settings common to every radio of this role here (mode, SSID, PSK, frequency, country) and per-radio settings in Config Overrides, which are applied afterwards and win on any key set in both.",
                     "default": [],
-                    "x-position": 15,
+                    "x-position": 16,
                     "items": {
                         "title": "Profile Override",
                         "x-name": "profile_override",
@@ -876,6 +889,254 @@
             "required": [
                 "mac"
             ]
+        }
+    },
+    "ubiquiti_network_overview": {
+        "name": "ubiquiti_network_overview",
+        "display_name": "Ubiquiti Network Overview",
+        "type": "PRO",
+        "visibility": "PUB",
+        "allow_many": false,
+        "description": "One graph of every Ubiquiti airMAX radio in the organisation \u2014 how they link to each other, the signal, SNR and throughput on each hop, and which radios or devices are offline.",
+        "long_description": "README.md",
+        "icon_url": "https://cdn11.bigcommerce.com/s-qfsa541khk/images/stencil/250w/i/ubiquiti_1686844765__27928.original.png",
+        "depends_on": [],
+        "organisation_id": null,
+        "image_name": null,
+        "run_command": null,
+        "export_config_command": "export-config-overview",
+        "export_ui_command": "export-ui-overview",
+        "build_widget_command": "npm --prefix widget run build",
+        "widget": "widget/assets/UbiquitiNetworkWidget.js",
+        "lambda_config": {
+            "Environment": {
+                "Variables": {
+                    "DOOVER_DATA_ENDPOINT": "https://data.doover.com/api"
+                }
+            },
+            "Runtime": "python3.13",
+            "Timeout": 300,
+            "Handler": "ubiquiti_network_overview.handler",
+            "MemorySize": 128,
+            "Architectures": [
+                "x86_64"
+            ]
+        },
+        "staging_config": {
+            "organisation_id": null,
+            "lambda_config": {
+                "Environment": {
+                    "Variables": {
+                        "DOOVER_DATA_ENDPOINT": "https://data.staging.udoover.com/api"
+                    }
+                },
+                "Runtime": "python3.13",
+                "Timeout": 300,
+                "Handler": "ubiquiti_network_overview.handler",
+                "MemorySize": 128,
+                "Architectures": [
+                    "x86_64"
+                ]
+            }
+        },
+        "key": null,
+        "config_schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "$id": "",
+            "title": "$default",
+            "type": "object",
+            "properties": {
+                "dv_proc_extended_permissions": {
+                    "title": "Devices",
+                    "x-name": "dv_proc_extended_permissions",
+                    "x-hidden": false,
+                    "type": "object",
+                    "x-required": true,
+                    "description": "Give Permission to access devices.",
+                    "x-position": 0,
+                    "properties": {
+                        "devices": {
+                            "title": "Devices",
+                            "x-name": "devices",
+                            "x-hidden": false,
+                            "type": "array",
+                            "x-required": true,
+                            "description": "List of devices to grant extended permissions to.",
+                            "x-position": 1,
+                            "items": {
+                                "title": "Device",
+                                "x-name": "device",
+                                "x-hidden": false,
+                                "format": "doover-resource-device",
+                                "type": "string",
+                                "x-required": true,
+                                "description": "Device ID",
+                                "pattern": "\\d+"
+                            }
+                        },
+                        "groups": {
+                            "title": "Groups",
+                            "x-name": "groups",
+                            "x-hidden": false,
+                            "type": "array",
+                            "x-required": true,
+                            "description": "List of groups to grant permissions to.",
+                            "x-position": 2,
+                            "items": {
+                                "title": "Group",
+                                "x-name": "group",
+                                "x-hidden": false,
+                                "format": "doover-resource-group",
+                                "type": "string",
+                                "x-required": true,
+                                "description": "Group ID",
+                                "pattern": "\\d+"
+                            }
+                        },
+                        "apps_installed": {
+                            "title": "Apps Installed",
+                            "x-name": "apps_installed",
+                            "x-hidden": false,
+                            "type": "array",
+                            "x-required": true,
+                            "description": "Permission will be given to any devices which have any of the apps listed installed.",
+                            "x-position": 3,
+                            "items": {
+                                "title": "Application",
+                                "x-name": "application",
+                                "x-hidden": false,
+                                "format": "doover-resource-application",
+                                "type": "string",
+                                "x-required": true,
+                                "description": "Application"
+                            }
+                        },
+                        "all_devices": {
+                            "title": "All Devices",
+                            "x-name": "all_devices",
+                            "x-hidden": false,
+                            "type": [
+                                "boolean",
+                                "null"
+                            ],
+                            "x-required": false,
+                            "description": "Permission will be given for all devices in this organisation. This is a very far-reaching permission to grant!",
+                            "default": false,
+                            "x-position": 4
+                        },
+                        "dd_permissions": {
+                            "title": "Data Permissions",
+                            "x-name": "dd_permissions",
+                            "x-hidden": true,
+                            "format": "dd_permissions",
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "x-required": false,
+                            "description": "Permissions granted on each device this app has access to. Leave empty to grant all permissions. Set to 0 to grant none \u2014 for an app that only needs the device map, not access to the devices.",
+                            "default": null,
+                            "x-position": 5
+                        }
+                    },
+                    "additionalElements": true,
+                    "required": [
+                        "devices",
+                        "groups",
+                        "apps_installed"
+                    ],
+                    "x-collapsible": true,
+                    "x-defaultCollapsed": false,
+                    "x-extraDeviceFields": [
+                        "id",
+                        "display_name",
+                        "group__id",
+                        "group__name",
+                        "latitude",
+                        "longitude",
+                        "app_installs__name",
+                        "app_installs__application_name"
+                    ]
+                },
+                "stale_after_minutes": {
+                    "title": "Stale After (Minutes)",
+                    "x-name": "stale_after_minutes",
+                    "x-hidden": false,
+                    "type": [
+                        "integer",
+                        "null"
+                    ],
+                    "x-required": false,
+                    "description": "A radio whose telemetry has not been updated for this long is drawn as stale rather than as its last-known state. Should be comfortably more than the AirMax poll interval (30 s by default).",
+                    "default": 10,
+                    "x-position": 1,
+                    "minimum": 1
+                },
+                "ignored_groups": {
+                    "title": "Ignored Groups",
+                    "x-name": "ignored_groups",
+                    "x-hidden": false,
+                    "type": "array",
+                    "x-required": true,
+                    "description": "Devices in these groups are left off the graph. Useful for test or unallocated groups when the permission above is set broadly. Does not nest \u2014 list direct parent groups.",
+                    "x-position": 2,
+                    "items": {
+                        "title": "Group",
+                        "x-name": "group",
+                        "x-hidden": false,
+                        "format": "doover-resource-group",
+                        "type": "string",
+                        "x-required": true,
+                        "description": "Group ID",
+                        "pattern": "\\d+"
+                    }
+                },
+                "dv_app_position": {
+                    "title": "Position",
+                    "x-name": "dv_app_position",
+                    "x-hidden": true,
+                    "type": [
+                        "integer",
+                        "null"
+                    ],
+                    "x-required": false,
+                    "description": "Position of Application in UI Structure. Smaller numbers are closer to the top.",
+                    "default": 100,
+                    "x-position": 3,
+                    "minimum": 0
+                }
+            },
+            "additionalElements": true,
+            "required": [
+                "dv_proc_extended_permissions",
+                "ignored_groups"
+            ]
+        },
+        "ui_schema": {
+            "displayString": "$config.app().APP_DISPLAY_NAME",
+            "hidden": "$config.app().interpreter_hidden:boolean:false",
+            "fullWidth": "$config.app().interpreter_full_width:boolean:false",
+            "position": "$config.app().dv_app_position:number:100",
+            "icon": null,
+            "colour": null,
+            "defaultOpen": true,
+            "type": "uiApplication",
+            "name": "$config.app().APP_KEY",
+            "children": {
+                "UbiquitiNetwork": {
+                    "name": "UbiquitiNetwork",
+                    "type": "uiRemoteComponent",
+                    "displayString": "Network Overview",
+                    "showActivity": true,
+                    "componentUrl": "$config.app().dv_widget_url",
+                    "position": 51,
+                    "hidden": false,
+                    "children": {},
+                    "scope": "UbiquitiNetworkWidget",
+                    "module": "./NetworkOverviewWidget",
+                    "app_key": "$config.app().APP_KEY"
+                }
+            }
         }
     }
 }

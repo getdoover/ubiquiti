@@ -27,7 +27,7 @@ from dataclasses import dataclass
 import asyncssh
 
 from . import cfg
-from .models import Platform, parse_firmware
+from .models import Platform, mac_or_none, parse_firmware
 from .telemetry import (
     Telemetry,
     ThroughputTracker,
@@ -49,6 +49,12 @@ STATUS_JSON_CMD = "mca-dump"
 STATUS_FLAT_CMD = "mca-status"
 STATIONS_CMD = "wstalist"
 COUNTERS_CMD = "cat /proc/net/dev"
+# Fallback for the radio's own MAC, used only when the status document does not
+# carry it. ``ath0`` is the airMAX radio; on a Bullet AC IP67 its address equals
+# the MAC discovery reports, while ``eth0`` differs in the fourth octet and
+# ``ath1`` (the 2.4 GHz management AP) has the locally-administered bit set — so
+# reading the wrong interface here would silently break every topology join.
+WLAN_MAC_CMD = "cat /sys/class/net/ath0/address"
 
 # Permissive algorithm sets so one client can talk to both an airOS 6 dropbear and
 # a current airOS 8 build. Weak algorithms are deliberate: these are field radios
@@ -278,6 +284,14 @@ class AirOSClient:
 
         stations = parse_wstalist(await self.run(STATIONS_CMD, check=False))
         telemetry = Telemetry.from_status(status, stations, sampled_at=sampled_at)
+
+        # Only when the status document did not carry it, so the common path
+        # stays at the same number of round trips. airOS 8.7.11 always reports
+        # ``deviceId``, so this is insurance for firmware that does not.
+        if telemetry.device_mac is None:
+            telemetry.device_mac = mac_or_none(
+                await self.run(WLAN_MAC_CMD, check=False)
+            )
 
         counters = parse_proc_net_dev(await self.run(COUNTERS_CMD, check=False))
         if tracker is not None and counters:

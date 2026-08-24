@@ -24,6 +24,8 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Mapping
 
+from .models import mac_or_none
+
 log = logging.getLogger(__name__)
 
 # Values arrive with units attached and inconsistent spacing: "-68 dBm",
@@ -197,7 +199,7 @@ class Station:
     def from_mapping(cls, data: Mapping[str, Any]) -> "Station":
         flat = flatten(data)
         return cls(
-            mac=as_text(pick(flat, "mac", "hwaddr", "apmac")),
+            mac=mac_or_none(pick(flat, "mac", "hwaddr", "apmac")),
             hostname=as_text(pick(flat, "name", "hostname", "remote.hostname")),
             signal_dbm=as_number(pick(flat, "signal", "rssi_dbm")),
             noise_dbm=as_number(pick(flat, "noisefloor", "noise")),
@@ -207,6 +209,26 @@ class Station:
             uptime_s=as_number(pick(flat, "uptime", "assoctime")),
             distance_m=as_number(pick(flat, "distance")),
         )
+
+    def to_dict(self) -> dict[str, Any]:
+        """The machine-readable form, for the ``stations_json`` tag.
+
+        Separate from :meth:`describe`, which is prose for a human reading the
+        app's UI. The network-overview widget needs the MAC to join an edge and
+        the per-station figures to label it, and cannot get either back out of a
+        formatted string.
+        """
+        return {
+            "mac": self.mac,
+            "hostname": self.hostname,
+            "signal_dbm": self.signal_dbm,
+            "noise_dbm": self.noise_dbm,
+            "ccq_pct": self.ccq_pct,
+            "tx_rate_mbps": self.tx_rate_mbps,
+            "rx_rate_mbps": self.rx_rate_mbps,
+            "uptime_s": self.uptime_s,
+            "distance_m": self.distance_m,
+        }
 
     def describe(self) -> str:
         bits = [self.mac or "?"]
@@ -252,6 +274,10 @@ class Telemetry:
     rx_throughput_kbps: float | None = None
 
     # identity
+    # The radio's own MAC, as it reports it. Equal to its ath0 (wireless) address
+    # and to the MAC discovery reports, confirmed on a Bullet AC IP67 — which is
+    # what lets a station's ``ap_mac`` join straight onto its AP's ``device_mac``.
+    device_mac: str | None = None
     model: str | None = None
     platform: str | None = None
     firmware: str | None = None
@@ -320,6 +346,10 @@ class Telemetry:
             # keeps it.
             tx_rate_mbps=as_number(pick(status, "txrate", "tx_rate", "wlanTxRate")),
             rx_rate_mbps=as_number(pick(status, "rxrate", "rx_rate", "wlanRxRate")),
+            # ``deviceId`` is the flat ``mca-status`` spelling and the only one
+            # observed on airOS 8.7.11 — ``mca-dump`` returns nothing at all on
+            # that firmware, so the JSON document's field names are untested here.
+            device_mac=mac_or_none(pick(status, "deviceId", "device_id", "hwaddr")),
             model=as_text(pick(status, "devmodel", "model", "board.name", "platform")),
             platform=as_text(pick(status, "board.shortname", "platform")),
             firmware=as_text(
@@ -331,7 +361,9 @@ class Telemetry:
             chanbw_mhz=as_number(pick(status, "chanbw", "chwidth", "wlanChannelWidth")),
             essid=as_text(pick(status, "essid", "ssid", "wlanEssid")),
             wireless_mode=as_text(pick(status, "mode", "wlanOpmode", "netrole")),
-            ap_mac=as_text(pick(status, "apmac", "ap_mac", "wlanApMac")),
+            # Normalised, not raw: an unassociated station reports all zeroes,
+            # which must read as "no peer" rather than as an address.
+            ap_mac=mac_or_none(pick(status, "apmac", "ap_mac", "wlanApMac")),
             distance_m=as_number(pick(status, "distance")),
             station_count=len(station_list)
             or int(as_number(pick(status, "count", "sta_count")) or 0),

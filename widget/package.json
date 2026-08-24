@@ -1,0 +1,42 @@
+{
+  "name": "ubiquiti-network-overview-widget",
+  "version": "1.0.0",
+  "description": "Ubiquiti Network Overview remote component for Doover — the fleet-wide airMAX link graph.",
+  "private": true,
+  "main": "index.js",
+  "scripts": {
+    "build": "rsbuild build",
+    "watch": "rsbuild build --watch --mode development",
+    "serve": "serve -s assets/ -l 8003",
+    "typecheck": "tsc --noEmit",
+    "publish:overview": "rsbuild build && doover channel publish-file ubiquiti_network_overview_1_widget assets/UbiquitiNetworkWidget.js --agent TODO_DASHBOARD_AGENT_ID"
+  },
+  "author": "Doover Team",
+  "license": "ISC",
+  "dependencies": {
+    "@base-ui/react": "^1.4.1",
+    "@module-federation/enhanced": "^0.21.6",
+    "@module-federation/rsbuild-plugin": "^0.21.6",
+    "@rsbuild/core": "^1.6.14",
+    "@rsbuild/plugin-react": "^1.4.2",
+    "@rspack/cli": "^1.6.7",
+    "@tailwindcss/postcss": "^4.0.0",
+    "@tanstack/react-query": "~5.90.2",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "dayjs": "^1.11.0",
+    "doover-js": "^0.6.9",
+    "lucide-react": "^0.577.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router": "^7.7.0",
+    "serve": "^14.2.5",
+    "tailwind-merge": "^3.5.0",
+    "tailwindcss": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.28",
+    "@types/react-dom": "^18.3.7",
+    "typescript": "^5.6.0"
+  }
+}

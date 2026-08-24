@@ -296,3 +296,61 @@ def test_comma_inside_a_value_is_preserved():
 def test_lines_without_an_equals_are_ignored():
     data = t.parse_mca_status("banner text\n\ndeviceName=X\n")
     assert data == {"deviceName": "X"}
+
+
+# ------------------------------------------------------------------- topology
+#
+# What the network overview joins on. `device_mac` is the node's identity and,
+# in AP mode, the BSSID a station reports as its `ap_mac`, so an edge is
+# `station.ap_mac == ap.device_mac`. Confirmed on a Bullet AC IP67, whose ath0
+# address, `deviceId` and discovery MAC are all the same value — while eth0
+# differs in the fourth octet and ath1 (the 2.4 GHz management AP) has the
+# locally-administered bit set.
+
+
+def test_device_mac_is_read_from_the_status_document():
+    tel = t.Telemetry.from_status(t.parse_mca_status(REAL_MCA_STATUS))
+    assert tel.device_mac == "28:70:4e:e2:9b:cb"
+
+
+def test_device_mac_is_normalised_to_match_the_configured_mac():
+    """mca-status upper-cases deviceId; config and discovery are lower case.
+
+    The join is a string comparison, so the two have to agree.
+    """
+    tel = t.Telemetry.from_status({"deviceId": "28:70:4E:E2:9B:CB"})
+    assert tel.device_mac == "28:70:4e:e2:9b:cb"
+
+
+def test_unassociated_station_reports_no_ap_rather_than_a_zero_mac():
+    """The captured fixture is a real idle radio: apMac=00:00:00:00:00:00."""
+    tel = t.Telemetry.from_status(t.parse_mca_status(REAL_MCA_STATUS))
+    assert tel.ap_mac is None
+
+
+def test_associated_station_reports_its_ap():
+    tel = t.Telemetry.from_status({"apMac": "28:70:4E:E2:9E:3C"})
+    assert tel.ap_mac == "28:70:4e:e2:9e:3c"
+
+
+def test_device_mac_is_absent_rather_than_wrong_when_unreported():
+    assert t.Telemetry.from_status({"signal": "-65"}).device_mac is None
+
+
+def test_station_to_dict_keeps_the_mac_joinable():
+    """The AP side of the same edge, and the numbers that label it."""
+    station = t.Station.from_mapping(
+        {"mac": "28:70:4E:E2:96:B9", "signal": -61, "ccq": 970, "tx": 130, "rx": 117}
+    )
+    payload = station.to_dict()
+    assert payload["mac"] == "28:70:4e:e2:96:b9"
+    assert payload["signal_dbm"] == -61
+    assert payload["ccq_pct"] == 97.0
+    assert payload["tx_rate_mbps"] == 130
+    assert payload["rx_rate_mbps"] == 117
+
+
+def test_station_describe_still_reads_as_prose():
+    """to_dict is a sibling of describe, not a replacement — the UI shows both."""
+    station = t.Station.from_mapping({"mac": "28:70:4E:E2:96:B9", "signal": -61})
+    assert "28:70:4e:e2:96:b9" in station.describe()

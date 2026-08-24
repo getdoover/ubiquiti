@@ -4,7 +4,8 @@
 
 ```
 pyproject.toml               uv workspace root; one entry point per app
-Dockerfile                   one image for every app in the repo
+Dockerfile                   the image for the DEV (device) apps
+build.sh                     package.zip + widget bundle for the PRO (cloud) apps
 doover_config.json           one key per app
 deployment/
   docker-compose.yml         host networking + NET_ADMIN (both required)
@@ -20,6 +21,15 @@ packages/ubiquiti_common/    shared driver — new apps reuse this
 src/ubiquiti_airmax/         the auto-config app
   provisioner.py             the reconcile pass — start here
   app_state.py               target state + attempt accounting
+src/ubiquiti_network_overview/   the fleet network-overview processor
+  application.py             hosts the widget; does no per-device work
+  app_config.py              which devices it may read (extended permissions)
+  app_ui.py                  one uiRemoteComponent, nothing else
+  __init__.py                lambda handler
+widget/                      the React remote component the overview renders
+  rsbuild.config.ts          module federation; exposes ./NetworkOverviewWidget
+  src/NetworkOverviewWidget.tsx
+  assets/UbiquitiNetworkWidget.js   build output (gitignored; CI builds it)
 templates/                   starting points for overlays (not live config)
 assets/icon.png              app icon, referenced by icon_url in doover_config
                              (Ubiquiti Networks lockup, flattened onto white and
@@ -34,12 +44,52 @@ uv sync --all-extras --dev
 uv run pytest tests -q
 uv run export-config-airmax     # write config_schema into doover_config.json
 uv run export-ui-airmax         # write ui_schema into doover_config.json
+uv run export-config-overview   # the same pair, for the network-overview app
+uv run export-ui-overview
 uv run airos discover --iface en0
 uv run airos status --host 192.168.1.20 --raw --samples 2
 ```
 
-Re-run both `export-*` commands after touching `app_config.py` or `app_ui.py` —
-the app cannot be published with a stale schema.
+Re-run the matching `export-*` pair after touching an app's `app_config.py` or
+`app_ui.py` — an app cannot be published with a stale schema, and CI validates
+every app's schemas on every run, not just the one that changed.
+
+## Two kinds of app in one repo
+
+`ubiquiti_airmax` is a `DEV` app: a Docker image that runs on a Doovit.
+`ubiquiti_network_overview` is a `PRO` app: a `package.zip` plus a React remote
+component, running in the cloud on its own agent.
+
+`doover app discover` sorts them out from the app blocks, and the shared CI
+workflow runs the image job for one and the package job for the other — no
+workflow changes were needed to add the second app. Check it after editing
+`doover_config.json`:
+
+```bash
+doover app discover . --json
+```
+
+`ubiquiti_airmax` must report `builds_image: true`; `ubiquiti_network_overview`
+must report `builds_package: true` and `widget: true`.
+
+## Working on the widget
+
+```bash
+cd widget
+npm install
+npm run build          # -> assets/UbiquitiNetworkWidget.js
+npm run watch          # rebuild on change
+npm run serve          # serve assets/ on :8003 to host it locally
+npm run typecheck      # rspack only strips types; this is what checks them
+```
+
+`./build.sh` at the repo root does the Python packaging and then builds the
+widget, which is what CI runs.
+
+The widget bundles its own `doover-js` rather than sharing the host's, and
+re-provides the host's live client via `peekDooverClient()`. `@tanstack/react-query`
+**must** stay a shared singleton or the widget's `useQueryClient()` cannot see
+the provider the host renders.
 
 ## Testing against a real radio
 

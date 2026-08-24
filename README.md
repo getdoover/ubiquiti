@@ -2,13 +2,14 @@
 
 Doover apps to manage and interface with Ubiquiti devices.
 
-This is a multi-app repo: one image, one `doover_config.json`, one app per entry
-point in `pyproject.toml`. Shared device-driver code lives in
-`packages/ubiquiti_common/` so a second app doesn't fork it.
+This is a multi-app repo: one `doover_config.json`, one app per entry point in
+`pyproject.toml`. Shared device-driver code lives in `packages/ubiquiti_common/`
+so a second app doesn't fork it.
 
-| App | Entry point | What it does |
-|-----|-------------|--------------|
-| **Ubiquiti AirMax** (`ubiquiti_airmax`) | `doover-app-run-airmax` | Live telemetry + autonomous config for one airMAX radio |
+| App | Runs on | What it does |
+|-----|---------|--------------|
+| **Ubiquiti AirMax** (`ubiquiti_airmax`) | the Doovit, as a container | Live telemetry + autonomous config for one airMAX radio |
+| **Ubiquiti Network Overview** (`ubiquiti_network_overview`) | the cloud, on its own agent | One link graph of every airMAX radio in the organisation |
 
 ## Ubiquiti AirMax
 
@@ -138,6 +139,35 @@ Doovit that is often `br0`, which may also carry the device's own uplink. That i
 fine: a helper address is only added when the radio is off-subnet, and adding one
 does not disturb an existing default route. Set **Manage Interface Addresses**
 false to disable address changes entirely.
+
+## Ubiquiti Network Overview
+
+Every radio in the organisation on one graph: how they link to each other, the
+signal, SNR and throughput on each hop, and which radios — or which Doovits —
+are offline.
+
+```
+AirMax install ──► tag_values ──┐
+   (one per radio, many devices) │   read in one batched, live-subscribed call
+                                 ▼
+                      Network Overview widget ──► link graph
+                                 ▲
+Doovit agent ──► doover_connection ┘
+```
+
+**Nothing is installed on a device for this to work.** It is a cloud app on its
+own agent, and it reads what the AirMax installs already publish. Point its
+*Apps Installed* permission at the AirMax app and it finds its own radios —
+including the multi-radio Doovits that run an uplink and a downlink side by side.
+
+Topology comes from three tags each AirMax install publishes: `radio_mac`
+(the radio's own identity, which is also its BSSID in AP mode), `ap_mac` (the
+peer a station is associated with) and `stations_json` (the peers an AP can
+see). An edge is simply `station.ap_mac == ap.radio_mac`. Where a radio will not
+report its peer, an operator can set **Uplink MAC** on that install instead.
+
+Because those tags are the whole basis of the graph, an AirMax install has to be
+on a release that publishes them before its radio can be drawn.
 
 ## Bench tool
 

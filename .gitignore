@@ -216,3 +216,13 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# --- Ubiquiti Network Overview build artefacts -------------------------------
+# The processor app ships as a package.zip built by ./build.sh, and its remote
+# component as a bundle built by rsbuild. Both are produced by CI from source.
+packages_export/
+package.zip
+requirements.txt
+widget/node_modules/
+widget/dist/
+widget/assets/

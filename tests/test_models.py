@@ -1,6 +1,11 @@
 import pytest
 
-from ubiquiti_common.models import Platform, normalise_mac, parse_firmware
+from ubiquiti_common.models import (
+    Platform,
+    mac_or_none,
+    normalise_mac,
+    parse_firmware,
+)
 
 
 @pytest.mark.parametrize(
@@ -88,3 +93,44 @@ def test_generation_split_matches_the_airmax_m_ac_divide():
         assert Platform(code).generation == "airos6"
     for code in ("XC", "WA"):
         assert Platform(code).generation == "airos8"
+
+
+# --------------------------------------------------------------- mac_or_none
+#
+# The tolerant reader used on values the radio reports rather than a person
+# types. Its job is to be boring; the two cases worth pinning are the ones that
+# would otherwise corrupt the network graph.
+
+
+@pytest.mark.parametrize(
+    "raw, expected",
+    [
+        ("28:70:4E:E2:96:B9", "28:70:4e:e2:96:b9"),  # mca-status upper-cases it
+        ("28-70-4e-e2-96-b9", "28:70:4e:e2:96:b9"),
+        ("28704ee296b9", "28:70:4e:e2:96:b9"),
+    ],
+)
+def test_mac_or_none_normalises_like_normalise_mac(raw, expected):
+    assert mac_or_none(raw) == expected
+
+
+def test_mac_or_none_rejects_the_unassociated_placeholder():
+    """A station with no peer reports all zeroes.
+
+    Confirmed on a bench of seven idle Bullet AC IP67s, every one of them
+    reporting ``apMac=00:00:00:00:00:00``. Read literally, that is one address
+    that every unassociated radio in a fleet appears to link to — a phantom hub
+    in the middle of the network graph.
+    """
+    assert mac_or_none("00:00:00:00:00:00") is None
+    assert mac_or_none("000000000000") is None
+
+
+def test_mac_or_none_rejects_broadcast():
+    assert mac_or_none("ff:ff:ff:ff:ff:ff") is None
+
+
+@pytest.mark.parametrize("raw", [None, "", "   ", "Bullet AC IP67", "not a mac"])
+def test_mac_or_none_returns_none_rather_than_raising(raw):
+    """Every caller is reading a telemetry field that is legitimately absent."""
+    assert mac_or_none(raw) is None

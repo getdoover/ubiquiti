@@ -35,6 +35,26 @@ def test_config_schema_exports():
     assert "variables" not in props, "template variables were removed"
     # The radio this install manages is the one thing an operator must supply.
     assert schema["required"] == ["mac"]
+    # The declared-uplink escape hatch for the network overview. Optional, and
+    # empty by default: the link is normally read off the radio itself.
+    assert props["uplink_mac"]["default"] == ""
+    assert "uplink_mac" not in schema["required"]
+
+
+def test_topology_tags_are_published():
+    """The network overview joins every edge on these.
+
+    They are a hard dependency of the overview app, not a nicety: an install
+    that does not publish `radio_mac` has no identity to draw, and one that does
+    not publish `stations_json` cannot label the AP side of its links.
+    """
+    from pydoover.tags import Tag
+    from ubiquiti_airmax.app_tags import AirMaxTags
+
+    for name in ("radio_mac", "uplink_mac", "stations_json", "ap_mac"):
+        assert isinstance(getattr(AirMaxTags, name, None), Tag), (
+            f"{name} is not a published tag"
+        )
 
 
 def test_ui_has_no_provisioning_controls():
@@ -132,3 +152,72 @@ def test_either_layer_alone_still_works():
     assert build_overlay([Override("a.b", "1")] + []) == {"a.b": "1"}
     assert build_overlay([] + [Override("a.b", "2")]) == {"a.b": "2"}
     assert build_overlay([]) == {}
+
+
+# ---------------------------------------------------- ubiquiti_network_overview
+#
+# The processor app. It ships as a package.zip rather than an image, so there is
+# no container smoke test to catch a broken import — these stand in for it.
+
+
+def test_overview_imports():
+    import ubiquiti_network_overview  # noqa: F401
+    from ubiquiti_network_overview import app_config, app_ui, application  # noqa: F401
+
+
+def test_overview_exposes_a_lambda_handler():
+    """`lambda_config.Handler` in doover_config.json names this function."""
+    import json
+
+    import ubiquiti_network_overview
+
+    assert callable(ubiquiti_network_overview.handler)
+
+    config = json.loads(_repo_root().joinpath("doover_config.json").read_text())
+    handler = config["ubiquiti_network_overview"]["lambda_config"]["Handler"]
+    module, _, attr = handler.rpartition(".")
+    assert module == "ubiquiti_network_overview", (
+        "the handler must name the package as build.sh vendors it — a `src.` "
+        "prefix means the zip carries a second copy of these modules"
+    )
+    assert attr == "handler"
+
+
+def test_overview_config_grants_device_permission():
+    """Without this the dashboard has no devices to read."""
+    from ubiquiti_network_overview.app_config import NetworkOverviewConfig
+
+    props = NetworkOverviewConfig.to_schema()["properties"]
+    assert "dv_proc_extended_permissions" in props
+
+
+def test_overview_ui_module_matches_the_widget_bundle():
+    """The UI schema's `module` must be a module rsbuild actually exposes.
+
+    A mismatch does not fail any build: the app publishes, the bundle loads, and
+    the panel renders empty. Pinning both ends against each other is the only
+    thing that catches a rename.
+    """
+    import json
+    import re
+
+    config = json.loads(_repo_root().joinpath("doover_config.json").read_text())
+    child = config["ubiquiti_network_overview"]["ui_schema"]["children"][
+        "UbiquitiNetwork"
+    ]
+    assert child["type"] == "uiRemoteComponent"
+
+    rsbuild = _repo_root().joinpath("widget/rsbuild.config.ts").read_text()
+    exposed = set(re.findall(r"'(\./[A-Za-z0-9_]+)':", rsbuild))
+    assert child["module"] in exposed, (
+        f"{child['module']} is not exposed by rsbuild.config.ts ({exposed})"
+    )
+
+    scope = re.search(r"name:\s*'([A-Za-z0-9_]+)'", rsbuild).group(1)
+    assert child["scope"] == scope
+
+
+def _repo_root():
+    from pathlib import Path
+
+    return Path(__file__).resolve().parents[1]

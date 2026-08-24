@@ -826,6 +826,19 @@
                                 "description": "Optional note, e.g. 'factory default' or 'site standard'.",
                                 "default": "",
                                 "x-position": 3
+                            },
+                            "apply_to_radio": {
+                                "title": "Set This On The Radio",
+                                "x-name": "apply_to_radio",
+                                "x-hidden": false,
+                                "type": [
+                                    "boolean",
+                                    "null"
+                                ],
+                                "x-required": false,
+                                "description": "Enforce this credential on the radio, so every radio ends up with the same login. The password is stored on the radio as a crypt hash, which the app generates \u2014 a radio already using this password is left alone rather than needlessly rewritten and rebooted. Flag exactly one credential; this one must stay in the list or the app locks itself out.",
+                                "default": false,
+                                "x-position": 4
                             }
                         },
                         "additionalElements": true,
@@ -1068,8 +1081,8 @@
                         "null"
                     ],
                     "x-required": false,
-                    "description": "A radio whose telemetry has not been updated for this long is drawn as stale rather than as its last-known state. Should be comfortably more than the AirMax poll interval (30 s by default).",
-                    "default": 10,
+                    "description": "A radio not heard from for this long is drawn as stale rather than as its last-known state, and the diagram says so. Ages are shown on every radio regardless, and a warning appears once the freshest reading anywhere passes half this window. Ten polls at the AirMax default of 30 s is five minutes, which is the default here.",
+                    "default": 5,
                     "x-position": 1,
                     "minimum": 1
                 },

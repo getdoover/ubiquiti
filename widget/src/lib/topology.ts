@@ -77,6 +77,12 @@ export interface Radio {
   rxRateMbps: number | null;
   txThroughputKbps: number | null;
   rxThroughputKbps: number | null;
+  /** When the app last actually reached this radio, ms since epoch.
+   *
+   * The single most important field on the card. Every other value is a
+   * snapshot, and without knowing how old the snapshot is, a fleet that went
+   * down five minutes ago is indistinguishable from one that is healthy now. */
+  lastSeenMs: number | null;
   lastUpdated: number | null;
 }
 

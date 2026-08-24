@@ -38,6 +38,7 @@ function radio(id: string, agentId: string, mac: string, apMac?: string): Radio 
     rxRateMbps: null,
     txThroughputKbps: null,
     rxThroughputKbps: null,
+    lastSeenMs: null,
     lastUpdated: null,
   };
 }
@@ -192,10 +193,17 @@ describe("pickHandles", () => {
     });
   });
 
-  it("goes vertical at a serpentine wrap", () => {
-    expect(pickHandles({ x: 0, y: 0, h: 100 }, { x: 0, y: 300, h: 100 })).toEqual({
-      sourceHandle: "b-s",
-      targetHandle: "t-t",
+  it("routes a wrap around the outside, not down through the boxes", () => {
+    // Both ends leave on the same outer side, so the line loops around the edge
+    // of the block. Going out the bottom sent it straight through the sibling
+    // radio card and then through the box below.
+    expect(pickHandles({ x: 0, y: 0, h: 100 }, { x: 0, y: 300, h: 100 }, "r")).toEqual({
+      sourceHandle: "r-s",
+      targetHandle: "r-t",
+    });
+    expect(pickHandles({ x: 0, y: 0, h: 100 }, { x: 0, y: 300, h: 100 }, "l")).toEqual({
+      sourceHandle: "l-s",
+      targetHandle: "l-t",
     });
   });
 });

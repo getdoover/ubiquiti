@@ -28,3 +28,11 @@
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
 }
+
+/* React Flow paints its node layer over the edge-label layer, so a stat pill
+   sitting between two device boxes had its middle covered and read as two
+   broken fragments. Lift the label layer above the nodes — the pills are small
+   and land in the gaps, and a covered number is worse than an overlapped box. */
+.react-flow__edgelabel-renderer {
+  z-index: 6;
+}

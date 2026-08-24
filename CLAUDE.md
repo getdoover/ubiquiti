@@ -88,6 +88,20 @@ convergence is a background concern that reports its state.
   takes the per-install value. Pinned by
   `test_install_overrides_win_over_profile_overrides` and
   `test_both_override_layers_exist_as_separate_keys`.
+- **The radio hashes its own password; we only persist it.** `users.N.password`
+  holds a crypt hash. `AirOSClient.set_password` runs BusyBox `passwd` so the
+  *radio* generates it, then reads it back from `/etc/passwd` — which is **tmpfs
+  on a read-only squashfs root**, so the hash must be written to
+  `users.N.password` in flash or the reboot erases it. Verified end-to-end on
+  Pump 8's AP through a real reboot. Do not reintroduce local hash generation.
+- **`probe()` is the login convergence signal.** It reports which credential
+  authenticated, so no hashing or config diff decides whether to act — and
+  enforcement can only fire when some credential already worked, so the app
+  cannot lock itself out. The `passwd` call sits at push time only: it changes the
+  live login immediately, so running it during a dry run or while holding for the
+  deployment delay would leave live and flash disagreeing. Pinned by
+  `test_dry_run_never_touches_the_password` and
+  `test_deployment_delay_never_touches_the_password`.
 - **Override values are literal.** `build_overlay` does no templating: one install
   manages one radio, so there is nothing to parameterise. It validates keys
   against `_VALID_KEY` and **refuses any value containing `{{` or `}}`** — nothing
@@ -195,6 +209,23 @@ renders confidently instead of erroring.
   diagram. That is every radio until the topology-tag release reaches the fleet.
 - **SNR bands are conventional, not reported by the hardware.** `SNR_BANDS` in
   `lib/appearance.ts` is the single place to change them.
+- **Age is not decoration — it is the load-bearing signal.** Every value on a
+  radio card is a snapshot, so a fleet that stopped reporting while it happened
+  to look healthy renders as an entirely green, entirely confident lie. This
+  went wrong exactly once: the fleet went offline, the last readings were five
+  minutes old against a ten-minute window, and nothing on screen suggested a
+  problem. Three defences, all of them needed:
+  * `last_seen` (the per-radio tag, not the channel's `last_updated` — one dead
+    radio on a live Doovit must still read as stale) is shown on every card.
+  * `ageTone` warns at **half** the staleness window, not at the end of it.
+  * A banner names the freshest reading anywhere: if even that is old, every
+    green node is a claim about the past.
+  `stale_after_minutes` defaults to 5 — ten polls at the AirMax default of 30 s.
+- **Edge labels carry two values, and sit above the node layer.** React Flow
+  paints nodes over `.react-flow__edgelabel-renderer`, so a five-stat pill
+  between two boxes had its middle covered and read as two broken fragments.
+  `styles.css` lifts that layer; the pill shows SNR and throughput, with the
+  rest on hover.
 
 ## Environment facts
 

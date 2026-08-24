@@ -66,11 +66,17 @@ class AirMaxApplication(Application):
 
     # ---------------------------------------------------------------- config
     def _settings(self) -> Settings:
+        credentials_cfg = list(self.config.credentials.elements)
         credentials = [
-            Credential(c.username.value, c.password.value)
-            for c in self.config.credentials.elements
+            Credential(c.username.value, c.password.value) for c in credentials_cfg
         ]
+        enforce = next((c for c in credentials_cfg if c.apply_to_radio.value), None)
         return Settings(
+            enforce_credential=(
+                Credential(enforce.username.value, enforce.password.value)
+                if enforce is not None
+                else None
+            ),
             interface=self.config.interface.value,
             dry_run=self.config.dry_run.value,
             deployment_delay=self.config.deployment_delay.value,

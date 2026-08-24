@@ -30,9 +30,11 @@ const PAD_BOTTOM = 14;
 
 export const GROUP_WIDTH = NODE_WIDTH + PAD_X * 2;
 
-/** Gaps between device boxes. Horizontal is wide enough for an edge's stat pill. */
-const COL_GAP = 96;
-const ROW_GAP = 72;
+/** Gaps between device boxes. The horizontal gap has to fit an edge's stat
+ * pill with clear air either side — at 96px the pill ran under the boxes and
+ * was unreadable. */
+const COL_GAP = 156;
+const ROW_GAP = 104;
 /** Space between disconnected components, stacked below one another. */
 const COMPONENT_GAP = 96;
 
@@ -257,6 +259,7 @@ function placeWithDagre(
 export function pickHandles(
   from: Placement & { h: number },
   to: Placement & { h: number },
+  outerSide: "l" | "r" = "r",
 ): { sourceHandle: string; targetHandle: string } {
   const dx = to.x - from.x;
   const dy = to.y + to.h / 2 - (from.y + from.h / 2);
@@ -265,9 +268,11 @@ export function pickHandles(
       ? { sourceHandle: "r-s", targetHandle: "l-t" }
       : { sourceHandle: "l-s", targetHandle: "r-t" };
   }
-  return dy >= 0
-    ? { sourceHandle: "b-s", targetHandle: "t-t" }
-    : { sourceHandle: "t-s", targetHandle: "b-t" };
+  // A serpentine wrap. Leaving through the bottom handle sends the line
+  // straight down through the sibling radio card and then through the box
+  // below it. Leaving through the *outer* side on both ends instead routes it
+  // around the outside of the block, where there is nothing to cross.
+  return { sourceHandle: `${outerSide}-s`, targetHandle: `${outerSide}-t` };
 }
 
 export function layoutTopology(topology: Topology): { nodes: FlowNode[]; edges: FlowEdge[] } {
@@ -322,6 +327,11 @@ export function layoutTopology(topology: Topology): { nodes: FlowNode[]; edges: 
     });
   }
 
+  // Which way is "outward" for a wrap edge, so it routes around the block
+  // rather than back through the middle of it.
+  const xs = [...placements.values()].map((p) => p.x);
+  const centreX = xs.length ? (Math.min(...xs) + Math.max(...xs)) / 2 : 0;
+
   const edges: FlowEdge[] = links.map((link) => {
     const fromDevice = deviceOfRadio.get(link.source);
     const toDevice = deviceOfRadio.get(link.target);
@@ -330,9 +340,12 @@ export function layoutTopology(topology: Topology): { nodes: FlowNode[]; edges: 
       const from = placements.get(fromDevice);
       const to = placements.get(toDevice);
       if (from && to) {
+        const outerSide: "l" | "r" =
+          (from.x + to.x) / 2 >= centreX ? "r" : "l";
         handles = pickHandles(
           { ...from, h: heights.get(fromDevice) as number },
           { ...to, h: heights.get(toDevice) as number },
+          outerSide,
         );
       }
     }

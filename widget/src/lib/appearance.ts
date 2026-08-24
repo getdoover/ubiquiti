@@ -43,7 +43,28 @@ export const STATE_LABEL: Record<RadioState, string> = {
   ok: "Online",
   "radio-down": "Radio unreachable",
   "device-down": "Device offline",
-  stale: "Stale readings",
+  stale: "No recent data",
+};
+
+/**
+ * How to colour a reading's age.
+ *
+ * Deliberately banded off the staleness threshold rather than fixed: the point
+ * is to show drift *before* it crosses the line. A fleet that stopped reporting
+ * five minutes ago against a ten-minute threshold was previously drawn entirely
+ * green, which said "everything is fine" about a snapshot of the past.
+ */
+export function ageTone(ageMs: number | null, staleAfterMs: number): "fresh" | "ageing" | "stale" {
+  if (ageMs === null || !Number.isFinite(ageMs)) return "stale";
+  if (ageMs >= staleAfterMs) return "stale";
+  if (ageMs >= staleAfterMs / 2) return "ageing";
+  return "fresh";
+}
+
+export const AGE_COLOUR: Record<"fresh" | "ageing" | "stale", string> = {
+  fresh: "#64748b",
+  ageing: "#d97706",
+  stale: "#dc2626",
 };
 
 /** True for an AP, false for a station, null when the radio has not said. */
@@ -92,4 +113,22 @@ export function formatThroughput(kbps: number | null): string | null {
 export function formatRate(mbps: number | null): string | null {
   if (mbps === null || !Number.isFinite(mbps)) return null;
   return `${Math.round(mbps)}`;
+}
+
+
+/** Compact relative age: "42s", "5m", "3h", "2d".
+ *
+ * Lives here rather than in the widget module so the node component can use it
+ * without importing its own parent — a cycle that a bundler resolves quietly
+ * but which can bite as a TDZ error at runtime in a federated build.
+ */
+export function formatAge(ms: number | null): string | null {
+  if (ms === null || !Number.isFinite(ms) || ms < 0) return null;
+  const seconds = Math.round(ms / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 48) return `${hours}h`;
+  return `${Math.round(hours / 24)}d`;
 }

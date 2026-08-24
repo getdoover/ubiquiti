@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { ageTone, formatAge } from "./appearance";
 import {
   buildTopology,
   healthOf,
@@ -33,6 +34,7 @@ function radio(partial: Partial<Radio> & Pick<Radio, "id" | "agentId" | "appKey"
     rxRateMbps: null,
     txThroughputKbps: null,
     rxThroughputKbps: null,
+    lastSeenMs: null,
     lastUpdated: null,
     ...partial,
   };
@@ -247,5 +249,42 @@ describe("buildTopology — a real chain", () => {
     ];
     // Both name each other; that is one hop, not two, and must not recurse.
     expect(buildTopology(cyclic).links.filter((l) => l.kind === "wireless")).toHaveLength(1);
+  });
+});
+
+// ------------------------------------------------------------------ freshness
+
+describe("formatAge", () => {
+  it("reads at a glance across the ranges that matter", () => {
+    expect(formatAge(42_000)).toBe("42s");
+    expect(formatAge(5 * 60_000)).toBe("5m");
+    expect(formatAge(3 * 3_600_000)).toBe("3h");
+    expect(formatAge(3 * 86_400_000)).toBe("3d");
+  });
+
+  it("has no answer rather than a wrong one", () => {
+    expect(formatAge(null)).toBeNull();
+    expect(formatAge(-1)).toBeNull();
+    expect(formatAge(NaN)).toBeNull();
+  });
+});
+
+describe("ageTone", () => {
+  const window = 10 * 60_000; // a 10 minute staleness threshold
+
+  it("warns before the threshold, not only after it", () => {
+    // The case that prompted this: the fleet stopped reporting five minutes ago
+    // against a ten minute window, and every node was drawn confidently green.
+    expect(ageTone(5 * 60_000, window)).toBe("ageing");
+  });
+
+  it("is fresh only while the data really is", () => {
+    expect(ageTone(30_000, window)).toBe("fresh");
+    expect(ageTone(4 * 60_000, window)).toBe("fresh");
+  });
+
+  it("treats a reading past the window, or no reading at all, as stale", () => {
+    expect(ageTone(11 * 60_000, window)).toBe("stale");
+    expect(ageTone(null, window)).toBe("stale");
   });
 });

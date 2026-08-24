@@ -31,6 +31,7 @@ class FakeRadio:
         self.reboots = 0
         self.staged = None
         self.telemetry_reads = 0
+        self.passwd_calls = []
 
 
 class FakeClient:
@@ -56,6 +57,11 @@ class FakeClient:
 
     async def commit(self):
         self.radio.commits += 1
+
+    async def set_password(self, username, password):
+        self.radio.passwd_calls.append((username, password))
+        # A real radio hashes it with a fresh salt; the value is opaque to us.
+        return "$1$fakesalt$" + str(len(self.radio.passwd_calls))
 
     async def reboot(self):
         self.radio.reboots += 1
@@ -686,3 +692,91 @@ async def test_plaintext_password_fails_the_target_without_writing(radio):
     await p.run_pass([device()])
     assert p.state is TargetState.FAILED
     assert radio.writes == 0, "must never reach the radio"
+
+
+# ------------------------------------------------------- credential enforcement
+#
+# Verified on real hardware (Pump 8 AP, 2WA.v8.7.11): BusyBox `passwd` writes only
+# to /etc/passwd, which is tmpfs on a read-only squashfs root — so the radio's own
+# hash must be persisted to users.N.password or the reboot erases it. The radio
+# does the hashing; we only store it.
+#
+# probe() is the convergence signal: it reports which credential authenticated, so
+# no hashing or config diff is needed to decide, and enforcement can only fire
+# when some credential already worked — the app cannot lock itself out.
+
+ENFORCE = Credential("admin", "newpass")
+
+
+def make_enforcing(**kw):
+    kw.setdefault("credentials", [Credential("ubnt", "ubnt")])
+    kw.setdefault("enforce_credential", ENFORCE)
+    return make(**kw)
+
+
+async def test_wrong_login_is_enforced_at_push_time(radio):
+    p = make_enforcing()
+    await p.run_pass([device()])
+    assert radio.passwd_calls == [("ubnt", "newpass")], "radio must do the hashing"
+    assert radio.staged["users.1.name"] == "admin"
+    assert radio.staged["users.1.password"].startswith("$1$"), "hash must be persisted"
+    assert radio.reboots == 1
+    assert p.state is TargetState.APPLYING
+
+
+async def test_correct_login_is_left_alone(radio):
+    """probe() authenticating with the enforced credential is the whole check."""
+    p = make(
+        credentials=[ENFORCE],
+        enforce_credential=ENFORCE,
+        overrides=[prov.Override("radio.1.freq", "0")],
+    )  # config already matches
+    await p.run_pass([device()])
+    assert p.state is TargetState.CONVERGED
+    assert radio.passwd_calls == []
+    assert radio.writes == 0
+
+
+async def test_wrong_login_alone_is_enough_to_act(radio):
+    """Config matching must not mask a wrong login."""
+    p = make_enforcing(overrides=[prov.Override("radio.1.freq", "0")])
+    await p.run_pass([device()])
+    assert p.state is not TargetState.CONVERGED
+    assert radio.passwd_calls == [("ubnt", "newpass")]
+
+
+async def test_dry_run_never_touches_the_password(radio):
+    """passwd changes the live login immediately, so it must not run on a pass
+    that writes nothing — that leaves live and flash disagreeing."""
+    p = make_enforcing(dry_run=True)
+    await p.run_pass([device()])
+    assert radio.passwd_calls == []
+    assert radio.writes == 0
+    assert p.state is TargetState.WOULD_APPLY
+    assert "login" in p.record.last_diff
+
+
+async def test_deployment_delay_never_touches_the_password(radio):
+    p = make_enforcing(deployment_delay=300)
+    await p.run_pass([device()])
+    assert radio.passwd_calls == [], "must not change the live login while holding"
+    assert radio.writes == 0
+    assert p.state is TargetState.DRIFTED
+
+
+async def test_no_enforced_credential_means_no_password_work(radio):
+    p = make(enforce_credential=None)
+    await p.run_pass([device()])
+    assert radio.passwd_calls == []
+
+
+async def test_enforcement_is_idempotent_across_passes(radio):
+    """After the push the radio answers on the enforced credential, so the next
+    pass must do nothing."""
+    p = make_enforcing()
+    await p.run_pass([device()])
+    assert radio.passwd_calls == [("ubnt", "newpass")]
+    # The radio now authenticates as admin/newpass.
+    p.settings.credentials = [ENFORCE]
+    await p.run_pass([device()])
+    assert len(radio.passwd_calls) == 1, "must not re-set an already-correct login"

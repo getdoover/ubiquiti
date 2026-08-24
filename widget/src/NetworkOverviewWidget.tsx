@@ -17,7 +17,7 @@ import {
 import { peekDooverClient } from "doover-js";
 
 import { Background, Controls, MiniMap, ReactFlow } from "@xyflow/react";
-import { Maximize2, Minimize2 } from "lucide-react";
+import { AlertTriangle, Maximize2, Minimize2 } from "lucide-react";
 
 import { Badge } from "./components/ui/badge";
 import { Button } from "./components/ui/button";
@@ -25,12 +25,19 @@ import { Card, CardContent } from "./components/ui/card";
 import { DeviceGroupNode } from "./components/DeviceGroupNode";
 import { LinkEdge } from "./components/LinkEdge";
 import { RadioNode } from "./components/RadioNode";
-import { HEALTH_COLOUR, STATE_LABEL, radioState } from "./lib/appearance";
+import {
+  AGE_COLOUR,
+  HEALTH_COLOUR,
+  STATE_LABEL,
+  ageTone,
+  formatAge,
+  radioState,
+} from "./lib/appearance";
 import { layoutTopology } from "./lib/layout";
 import { buildTopology, healthOf, type Radio, type StationRecord } from "./lib/topology";
 
 const AIRMAX_APPLICATION = "ubiquiti_airmax";
-const DEFAULT_STALE_MINUTES = 10;
+const DEFAULT_STALE_MINUTES = 5;
 
 interface OverviewDeviceEntry extends DeviceMapEntry {
   app_installs?: Array<{ name?: string | null; application_name?: string | null }>;
@@ -142,6 +149,10 @@ function useRadios(agentId: string | undefined, appKey: string | undefined) {
       for (const key of appKeys) {
         const tags = (aggregate?.data as Record<string, any> | undefined)?.[key];
         if (!tags) continue;
+        // Per-radio, and far better than the channel's `last_updated`: this is
+        // when the app actually reached *this* radio, so one dead radio on a
+        // live Doovit still reads as stale.
+        const lastSeenMs = toEpochMs(num(tags.last_seen)) ?? lastUpdated;
         out.push({
           id: `${deviceId}:${key}`,
           agentId: deviceId,
@@ -156,7 +167,7 @@ function useRadios(agentId: string | undefined, appKey: string | undefined) {
 
           online: tags.online === true,
           agentOnline,
-          stale: lastUpdated !== null && now - lastUpdated > staleAfterMs,
+          stale: lastSeenMs !== null && now - lastSeenMs > staleAfterMs,
 
           hostname: str(tags.hostname),
           model: str(tags.model),
@@ -172,6 +183,7 @@ function useRadios(agentId: string | undefined, appKey: string | undefined) {
           rxRateMbps: num(tags.rx_rate),
           txThroughputKbps: num(tags.tx_throughput),
           rxThroughputKbps: num(tags.rx_throughput),
+          lastSeenMs,
           lastUpdated,
         });
       }
@@ -181,6 +193,7 @@ function useRadios(agentId: string | undefined, appKey: string | undefined) {
 
   return {
     radios,
+    staleAfterMs,
     devicesGranted: devices.length,
     isLoading: isLoading || query.isLoading,
     hasDeviceMap,
@@ -210,6 +223,12 @@ function DetailPanel({ radio, onClose }: { radio: Radio; onClose: () => void }) 
     ["Device", radio.deviceName],
     ["Install", radio.appKey],
     ["Status", STATE_LABEL[radioState(radio)]],
+    [
+      "Last seen",
+      radio.lastSeenMs === null
+        ? "never"
+        : `${formatAge(Date.now() - radio.lastSeenMs)} ago`,
+    ],
     ["Hostname", radio.hostname],
     ["Model", radio.model],
     ["Mode", radio.wirelessMode],
@@ -364,6 +383,13 @@ function NetworkOverviewWidgetInner({ uiElement }: { uiElement?: UiRemoteCompone
   const [view, setView] = useState<"diagram" | "table">("diagram");
   const [selected, setSelected] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
+  // Ages have to move on their own. A dashboard left open on a wall would
+  // otherwise keep saying "1m ago" an hour after the fleet stopped reporting.
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNowMs(Date.now()), 15_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   // Escape leaves full screen. Registered unconditionally — hooks cannot sit
   // behind the early returns below.
@@ -376,9 +402,23 @@ function NetworkOverviewWidgetInner({ uiElement }: { uiElement?: UiRemoteCompone
     return () => window.removeEventListener("keydown", onKey);
   }, [expanded]);
 
-  const { radios, devicesGranted, isLoading, hasDeviceMap } = useRadios(agentId, appKey);
+  const { radios, staleAfterMs, devicesGranted, isLoading, hasDeviceMap } = useRadios(
+    agentId,
+    appKey,
+  );
   const topology = useMemo(() => buildTopology(radios), [radios]);
-  const { nodes, edges } = useMemo(() => layoutTopology(topology), [topology]);
+  const { nodes: laidOut, edges } = useMemo(() => layoutTopology(topology), [topology]);
+  // The clock and the threshold are presentation, so they are injected here
+  // rather than threaded through the pure layout.
+  const nodes = useMemo(
+    () =>
+      laidOut.map((node) =>
+        node.type === "radio"
+          ? { ...node, data: { ...node.data, staleAfterMs, nowMs } }
+          : node,
+      ),
+    [laidOut, staleAfterMs, nowMs],
+  );
 
   if (isLoading) {
     return <div className="p-4 text-sm text-muted-foreground">Loading radios…</div>;
@@ -414,6 +454,19 @@ function NetworkOverviewWidgetInner({ uiElement }: { uiElement?: UiRemoteCompone
 
   const online = radios.filter((r) => radioState(r) === "ok").length;
   const wireless = topology.links.filter((l) => l.kind === "wireless");
+
+  // The freshest reading anywhere. If even this is old, the dashboard is
+  // showing a frozen snapshot and every green node on it is a claim about the
+  // past — which is exactly the failure this banner exists to name.
+  const seenTimes = radios
+    .map((r) => r.lastSeenMs)
+    .filter((v): v is number => v !== null);
+  const freshestAgeMs = seenTimes.length ? nowMs - Math.max(...seenTimes) : null;
+  const oldestAgeMs = seenTimes.length ? nowMs - Math.min(...seenTimes) : null;
+  const staleRadios = radios.filter(
+    (r) => r.lastSeenMs === null || nowMs - r.lastSeenMs >= staleAfterMs,
+  ).length;
+  const fleetTone = ageTone(freshestAgeMs, staleAfterMs);
   const worst = wireless
     .map((l) => l.snrDb)
     .filter((v): v is number => v !== null)
@@ -429,6 +482,16 @@ function NetworkOverviewWidgetInner({ uiElement }: { uiElement?: UiRemoteCompone
         {worst !== undefined && (
           <Badge style={{ background: HEALTH_COLOUR[healthOf(worst)], color: "white" }}>
             worst link {Math.round(worst)} dB
+          </Badge>
+        )}
+        {oldestAgeMs !== null && (
+          <Badge
+            style={{
+              background: AGE_COLOUR[ageTone(oldestAgeMs, staleAfterMs)],
+              color: "white",
+            }}
+          >
+            oldest reading {formatAge(oldestAgeMs)} ago
           </Badge>
         )}
         {topology.unplaceable.length > 0 && (
@@ -451,6 +514,28 @@ function NetworkOverviewWidgetInner({ uiElement }: { uiElement?: UiRemoteCompone
           ))}
         </span>
       </div>
+
+      {fleetTone !== "fresh" && (
+        <div
+          className="flex items-start gap-2 rounded-lg border px-3 py-2 text-[12px]"
+          style={{
+            borderColor: AGE_COLOUR[fleetTone],
+            color: AGE_COLOUR[fleetTone],
+            background: `${AGE_COLOUR[fleetTone]}14`,
+          }}
+        >
+          <AlertTriangle size={15} className="mt-[1px] shrink-0" />
+          <span>
+            <strong>
+              Nothing has reported for {formatAge(freshestAgeMs)}
+              {staleRadios === radios.length ? " — the whole fleet" : ""}.
+            </strong>{" "}
+            {staleRadios} of {radios.length} radio{radios.length === 1 ? "" : "s"} are
+            past the {Math.round(staleAfterMs / 60_000)} minute staleness window.
+            Everything shown below is the last known state, not the current one.
+          </span>
+        </div>
+      )}
 
       {view === "diagram" ? (
         <>

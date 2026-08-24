@@ -48,17 +48,22 @@ function LinkEdgeInner({
   const throughput =
     formatThroughput(link.rxThroughputKbps) ?? formatThroughput(link.txThroughputKbps);
 
-  const stats: string[] = [];
-  if (link.snrDb !== null) stats.push(`${Math.round(link.snrDb)} dB`);
-  if (link.signalDbm !== null) stats.push(`${Math.round(link.signalDbm)} dBm`);
-  if (link.ccqPct !== null) stats.push(`${Math.round(link.ccqPct)}%`);
+  // Two values on the pill, not five. The gap between two device boxes is about
+  // 156px; the previous label ran to roughly 260px, so its middle disappeared
+  // behind the boxes and it read as two broken fragments. Everything else is a
+  // hover away.
+  const headline = link.snrDb !== null ? `${Math.round(link.snrDb)} dB` : link.declared ? "declared" : "no data";
+
+  const full: string[] = [];
+  if (link.snrDb !== null) full.push(`SNR ${Math.round(link.snrDb)} dB`);
+  if (link.signalDbm !== null) full.push(`signal ${Math.round(link.signalDbm)} dBm`);
+  if (link.apSideSignalDbm !== null) full.push(`AP side ${Math.round(link.apSideSignalDbm)} dBm`);
+  if (link.ccqPct !== null) full.push(`CCQ ${Math.round(link.ccqPct)}%`);
   if (link.txRateMbps !== null && link.rxRateMbps !== null) {
-    stats.push(`${Math.round(link.txRateMbps)}/${Math.round(link.rxRateMbps)} Mbps`);
+    full.push(`rate ${Math.round(link.txRateMbps)}/${Math.round(link.rxRateMbps)} Mbps`);
   }
-  if (throughput) stats.push(throughput);
-  // A hop we know exists but have no measurements for still has to read as a
-  // link, not as a blank line.
-  if (stats.length === 0) stats.push(link.declared ? "declared" : "no data");
+  if (throughput) full.push(`throughput ${throughput}`);
+  if (link.declared) full.push("peer declared in config, not observed");
 
   return (
     <>
@@ -74,13 +79,19 @@ function LinkEdgeInner({
       />
       <EdgeLabelRenderer>
         <div
-          className="nodrag nopan pointer-events-none absolute rounded-md px-1.5 py-0.5 text-[10px] font-medium text-white shadow-sm"
+          className="nodrag nopan absolute flex flex-col items-center rounded-md px-1.5 py-0.5 text-center leading-tight text-white shadow-md ring-1 ring-white/60"
+          title={full.join(" · ") || "no measurements"}
           style={{
             transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
             background: colour,
+            // Hoverable, so the full stats are reachable without a click.
+            pointerEvents: "all",
           }}
         >
-          {stats.join(" · ")}
+          <span className="text-[11px] font-semibold tabular-nums">{headline}</span>
+          {throughput && (
+            <span className="text-[9px] font-medium tabular-nums opacity-90">{throughput}</span>
+          )}
         </div>
       </EdgeLabelRenderer>
     </>

@@ -3,16 +3,26 @@ import { Handle, Position } from "@xyflow/react";
 import { Radio as RadioIcon, RadioTower } from "lucide-react";
 
 import {
+  AGE_COLOUR,
   STATE_COLOUR,
   STATE_LABEL,
+  ageTone,
+  formatAge,
   isAccessPoint,
   radioState,
   signalGlow,
 } from "../lib/appearance";
 import type { Radio } from "../lib/topology";
 
-function RadioNodeInner({ data }: { data: { radio: Radio } }) {
-  const { radio } = data;
+function RadioNodeInner({
+  data,
+}: {
+  data: { radio: Radio; staleAfterMs: number; nowMs: number };
+}) {
+  const { radio, staleAfterMs, nowMs } = data;
+  const ageMs = radio.lastSeenMs === null ? null : nowMs - radio.lastSeenMs;
+  const tone = ageTone(ageMs, staleAfterMs);
+  const age = formatAge(ageMs);
   const state = radioState(radio);
   const colour = STATE_COLOUR[state];
   const glow = signalGlow(radio.signalDbm);
@@ -22,7 +32,10 @@ function RadioNodeInner({ data }: { data: { radio: Radio } }) {
   return (
     <div
       className="flex h-full w-full items-center gap-2 rounded-lg border border-border bg-card px-2 shadow-sm"
-      title={`${radio.deviceName} · ${radio.appKey} · ${STATE_LABEL[state]}`}
+      title={
+        `${radio.deviceName} · ${radio.appKey} · ${STATE_LABEL[state]}` +
+        (age ? ` · last seen ${age} ago` : " · never seen")
+      }
     >
       {/* A source and a target on every side. The serpentine layout sends hops
           left-to-right on one row, right-to-left on the next and downwards at
@@ -63,6 +76,19 @@ function RadioNodeInner({ data }: { data: { radio: Radio } }) {
           {ap === null ? "unknown mode" : ap ? "AP" : "Station"}
           {radio.frequencyMhz ? ` · ${Math.round(radio.frequencyMhz)} MHz` : ""}
         </span>
+      </span>
+
+      {/* Age, always visible. Every other number on this card is a snapshot;
+          without this there is no way to tell a healthy fleet from one that
+          stopped reporting while it happened to look healthy. */}
+      <span
+        className="shrink-0 rounded px-1 py-0.5 text-[10px] font-semibold tabular-nums"
+        style={{
+          color: tone === "fresh" ? AGE_COLOUR.fresh : "white",
+          background: tone === "fresh" ? "transparent" : AGE_COLOUR[tone],
+        }}
+      >
+        {age ?? "—"}
       </span>
     </div>
   );

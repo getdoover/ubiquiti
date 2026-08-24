@@ -38,12 +38,14 @@ class NetworkOverviewConfig(config.Schema):
     stale_after_minutes = config.Integer(
         "Stale After (Minutes)",
         name="stale_after_minutes",
-        default=10,
+        default=5,
         minimum=1,
         description=(
-            "A radio whose telemetry has not been updated for this long is drawn "
-            "as stale rather than as its last-known state. Should be comfortably "
-            "more than the AirMax poll interval (30 s by default)."
+            "A radio not heard from for this long is drawn as stale rather than "
+            "as its last-known state, and the diagram says so. Ages are shown on "
+            "every radio regardless, and a warning appears once the freshest "
+            "reading anywhere passes half this window. Ten polls at the AirMax "
+            "default of 30 s is five minutes, which is the default here."
         ),
     )
 

@@ -111,6 +111,11 @@ def intent_fingerprint(overrides: list[Override]) -> str:
     return hashlib.sha256(payload.encode()).hexdigest()[:16]
 
 
+#: The airOS user slot the enforced credential is written to. airOS ships a single
+#: admin account at index 1; index 2 exists but is disabled.
+ADMIN_USER_INDEX = 1
+
+
 @dataclass
 class Settings:
     interface: str = "eth0"
@@ -123,6 +128,8 @@ class Settings:
     discovery_timeout: float = 3.0
     ssh_port: int = 22
     manage_addresses: bool = True
+    #: Credential to enforce on the radio, if the operator flagged one.
+    enforce_credential: Credential | None = None
     credentials: list[Credential] = field(
         default_factory=lambda: [Credential("ubnt", "ubnt")]
     )
@@ -297,7 +304,20 @@ class Provisioner:
 
             current = await client.read_config()
             changes = cfg.diff(current, desired)
-            record.last_diff = cfg.format_diff(changes)
+            # probe() already told us which credential worked, so that *is* the
+            # convergence check for the login — no hashing and no config diff
+            # needed to decide. And because it only ever fires when some
+            # credential authenticated, the app can never lock itself out.
+            enforce = settings.enforce_credential
+            credential_wrong = bool(enforce) and (
+                (credential.username, credential.password)
+                != (enforce.username, enforce.password)
+            )
+            record.last_diff = cfg.format_diff(changes) + (
+                f"\n~ login: {credential.username} -> {enforce.username}"
+                if credential_wrong
+                else ""
+            )
 
             # Verifying a push from an earlier pass.
             if record.state is TargetState.APPLYING:
@@ -322,16 +342,16 @@ class Provisioner:
                     "did not converge, will retry after backoff",
                 )
 
-            if not changes:
+            if not changes and not credential_wrong:
                 record.transition(TargetState.CONVERGED, "config matches")
                 return None
 
+            work = f"{len(changes)} key(s)" + (" + login" if credential_wrong else "")
             if settings.dry_run:
                 record.transition(
-                    TargetState.WOULD_APPLY,
-                    f"dry run — {len(changes)} key(s) would change",
+                    TargetState.WOULD_APPLY, f"dry run — {work} would change"
                 )
-                return f"dry run, {len(changes)} key(s) would change"
+                return f"dry run, {work} would change"
 
             # Hold before the first write of a new intent, so a fleet-wide
             # deploy can reach every radio before any link drops. Checked
@@ -343,8 +363,7 @@ class Provisioner:
             if held > 0:
                 record.transition(
                     TargetState.DRIFTED,
-                    f"{len(changes)} key(s) to apply — holding {held:.0f}s "
-                    f"for the deployment delay",
+                    f"{work} to apply — holding {held:.0f}s for the deployment delay",
                 )
                 return f"holding {held:.0f}s before applying"
 
@@ -360,6 +379,27 @@ class Provisioner:
 
             # --- the irreversible part ----------------------------------
             record.record_attempt()
+
+            if credential_wrong:
+                # Deliberately here and nowhere earlier: `passwd` changes the
+                # live login immediately, so running it on a pass that then
+                # writes nothing (dry run, or holding for the delay) would leave
+                # the radio's live password disagreeing with its flash config.
+                #
+                # The radio generates the hash; we only persist it. `/etc/passwd`
+                # is tmpfs on a read-only squashfs root, so the hash must reach
+                # `users.N.password` in flash or the reboot below erases it.
+                digest = await client.set_password(
+                    credential.username, enforce.password
+                )
+                desired[f"users.{ADMIN_USER_INDEX}.name"] = enforce.username
+                desired[f"users.{ADMIN_USER_INDEX}.password"] = digest
+                log.info(
+                    "%s: enforcing login %s (was %s)",
+                    spec.mac,
+                    enforce.username,
+                    credential.username,
+                )
             log.info(
                 "%s (%s @ %s): applying %d key(s), attempt %d/%d",
                 spec.mac,

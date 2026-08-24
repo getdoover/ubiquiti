@@ -241,6 +241,41 @@ class AirOSClient:
         await self.run(f"cfgmtd -f {STAGED_CFG} -w")
         log.info("%s: committed staged config to flash", self.host)
 
+    async def set_password(self, username: str, password: str) -> str:
+        """Have the radio hash ``password`` for ``username``, and return the hash.
+
+        BusyBox ``passwd`` writes only to ``/etc/passwd``, which is a **tmpfs** —
+        the root filesystem is read-only squashfs and only ``/etc/persistent``
+        survives a power cycle. So this call alone does not persist: the caller
+        must write the returned hash into ``users.N.password`` and commit it, or
+        the change is erased on the next boot (which the caller itself triggers).
+
+        Doing it this way means the *radio* generates the hash, in whatever scheme
+        its own firmware uses, rather than us reproducing crypt(3) and hoping the
+        format matches.
+        """
+        quoted = password.replace("'", "'\\''")
+        out = await self.run(
+            f"printf '%s\\n%s\\n' '{quoted}' '{quoted}' | passwd {username} 2>&1",
+            check=False,
+        )
+        if "changed" not in (out or "").lower():
+            raise AirOSError(
+                f"{self.host}: passwd for {username!r} did not report success: "
+                f"{(out or '').strip()[:120]}"
+            )
+        line = await self.run(
+            f"grep '^{username}:' /etc/passwd | cut -d: -f2", check=False
+        )
+        digest = (line or "").strip()
+        if not digest.startswith("$"):
+            raise AirOSError(
+                f"{self.host}: could not read back a hash for {username!r} "
+                f"(got {digest[:40]!r})"
+            )
+        log.info("%s: radio generated a new password hash for %s", self.host, username)
+        return digest
+
     async def reboot(self) -> None:
         """Reboot the radio.
 

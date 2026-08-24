@@ -29,6 +29,18 @@ class Credential(config.Object):
         default="",
         description="Optional note, e.g. 'factory default' or 'site standard'.",
     )
+    apply_to_radio = config.Boolean(
+        "Set This On The Radio",
+        name="apply_to_radio",
+        default=False,
+        description=(
+            "Enforce this credential on the radio, so every radio ends up with the "
+            "same login. The password is stored on the radio as a crypt hash, which "
+            "the app generates — a radio already using this password is left alone "
+            "rather than needlessly rewritten and rebooted. Flag exactly one "
+            "credential; this one must stay in the list or the app locks itself out."
+        ),
+    )
 
 
 class Override(config.Object):

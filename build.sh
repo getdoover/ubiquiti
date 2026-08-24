@@ -1,8 +1,9 @@
 #!/bin/sh
 #
-# Builds the deployable for the *processor* app in this repo
-# (`ubiquiti_network_overview`): a package.zip of vendored dependencies plus the
-# source tree, and the React widget bundle the app's UI schema points at.
+# Builds the package.zip for the *processor* app in this repo
+# (`ubiquiti_network_overview`): its vendored dependencies, with the app's own
+# modules among them. The widget bundle is built separately — see the note at
+# the bottom.
 #
 # The AirMax app is not built here — it is a device app and ships as a Docker
 # image. `doover app discover` tells the two apart and CI runs the right job for
@@ -40,12 +41,16 @@ cd ..
 # `src.…`. Adding `zip package.zip src` on top puts a second copy of the same
 # modules in the archive, and which one imports then depends on sys.path order.
 
-# The remote component the app's UI schema loads. Produces
-# widget/assets/UbiquitiNetworkWidget.js, which the app block references as its
-# `widget`.
-if [ -d widget ]; then
-  npm --prefix widget install
-  npm --prefix widget run build
-fi
+# NOTE: the widget is deliberately NOT built here.
+#
+# `doover app publish` builds it *before* it runs this script — it invokes the
+# app block's `build_widget_command` at one step and `./build.sh` at a later one
+# — so an `npm install` placed here runs too late to help and the widget build
+# fails with `rsbuild: not found`. That is why `build_widget_command` installs
+# its own dependencies (`npm --prefix widget ci && …`) rather than relying on
+# this script.
+#
+# Build it by hand with the same command:
+#   npm --prefix widget ci && npm --prefix widget run build
 
 echo "OK"

@@ -262,3 +262,20 @@ def test_overview_app_block_pins_an_identifier():
         "pin `id` (or `key`) in the ubiquiti_network_overview block — without "
         "one, `doover app publish` cannot resolve the existing application"
     )
+
+
+def test_widget_build_command_installs_its_own_dependencies():
+    """`build_widget_command` must install node deps, not assume build.sh did.
+
+    `doover app publish` runs the widget build *before* `./build.sh`, so an
+    `npm install` in that script comes too late and CI fails with
+    `sh: 1: rsbuild: not found`. The command therefore has to be self-contained.
+    """
+    import json
+
+    config = json.loads(_repo_root().joinpath("doover_config.json").read_text())
+    command = config["ubiquiti_network_overview"]["build_widget_command"]
+    assert "npm ci" in command or "ci" in command.split(), (
+        f"build_widget_command must install dependencies first: {command!r}"
+    )
+    assert "run build" in command, command

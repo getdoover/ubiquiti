@@ -906,7 +906,7 @@
         "run_command": null,
         "export_config_command": "export-config-overview",
         "export_ui_command": "export-ui-overview",
-        "build_widget_command": "npm --prefix widget run build",
+        "build_widget_command": "npm --prefix widget ci && npm --prefix widget run build",
         "widget": "widget/assets/UbiquitiNetworkWidget.js",
         "lambda_config": {
             "Environment": {

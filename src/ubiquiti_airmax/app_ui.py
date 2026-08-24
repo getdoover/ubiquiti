@@ -133,9 +133,16 @@ class AirMaxUI(ui.UI):
                 value=T.latency,
                 name="latency",
                 units="ms",
-                # Not 0: the whole useful range of this field is sub-millisecond
-                # on a healthy link, and precision=0 rendered all of it as "0".
+                # Sub-millisecond on a short hop, so 0 decimals would render the
+                # whole healthy range as a flat "0".
                 precision=2,
+            ),
+            ui.NumericVariable(
+                "Packet Loss",
+                value=T.packet_loss,
+                name="packet_loss",
+                units="%",
+                precision=0,
             ),
         ],
     )

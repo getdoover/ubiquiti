@@ -281,3 +281,26 @@ def test_widget_build_command_installs_its_own_dependencies():
         f"build_widget_command must install dependencies first: {command!r}"
     )
     assert "run build" in command, command
+
+
+def test_peer_address_is_exported_and_optional():
+    """The far-end address for latency measurement. Optional: an AP derives it
+    from its station list, and a radio with no peer configured simply reports no
+    latency rather than failing."""
+    from ubiquiti_airmax.app_config import AirMaxConfig
+
+    props = AirMaxConfig.to_schema()["properties"]
+    assert props["peer_address"]["default"] == ""
+    assert "peer_address" not in AirMaxConfig.to_schema()["required"]
+
+
+def test_latency_and_loss_appear_in_rates_and_throughput():
+    import json
+
+    kids = json.load(open("doover_config.json"))["ubiquiti_airmax"]["ui_schema"][
+        "children"
+    ]["throughput"]["children"]
+    assert kids["latency"]["units"] == "ms"
+    # 0 decimals rendered a healthy sub-millisecond link as a flat "0".
+    assert kids["latency"]["decPrecision"] >= 2
+    assert kids["packet_loss"]["units"] == "%"

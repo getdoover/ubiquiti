@@ -136,6 +136,33 @@ convergence is a background concern that reports its state.
   `192.168.1.1` on `br0` was not caused by it. Addresses this app adds carry the
   label `br0:doover-prov`, so `ip -o addr show` tells you whose they are.
 
+### Latency is an ICMP round trip, not airOS's number
+
+`Tags.latency` is the average RTT of a 5-packet ping to the radio at the *far* end
+of the link, with `packet_loss` alongside it. It is deliberately **not** airOS's
+`wlanTxLatency` / per-station `tx_latency`, which is airMAX TDMA *queue* latency:
+0 on any uncongested link, reported at 1 ms resolution, and therefore incapable of
+expressing link length at all — 10 km of air is 0.067 ms round trip. Published
+directly, it read a constant 0 across the whole Porgera fleet. It is still parsed
+into `Telemetry.latency_ms` as a congestion signal, and left unpublished.
+
+Two things that hid the useful range while this was being built, both worth not
+repeating: `precision=0` on the UI variable rendered every sub-millisecond reading
+as `0`, and `log_on=Delta(2.0)` on the tag meant nothing under 2 ms ever logged.
+
+The peer address comes from `config.peer_address` if set, else from the first
+station in `wstalist` that reports a `lastip`. **An AP therefore needs no config;
+a client must be told**, because its `mca-status` identifies the AP by MAC only.
+Porgera is one flat `192.168.1.0/24` bridged across every hop, so any radio is
+pingable from any Doovit.
+
+`ping` is a subprocess, not a raw socket, because a raw socket would need
+`CAP_NET_RAW`; BusyBox `ping` is already in the base image. `ubiquiti_common.ping`
+parses BusyBox, iputils and macOS output — the fourth RTT column is `mdev` on
+Linux and `stddev` on macOS, and pinning it to `mdev` silently returned no RTT.
+A missing `ping` binary raises `PingError`; an unanswered host is a 100%-loss
+`PingResult`, since that is a real measurement and the most valuable one.
+
 ## Ubiquiti Network Overview
 
 `src/ubiquiti_network_overview/` plus `widget/`. One install, on its own agent,

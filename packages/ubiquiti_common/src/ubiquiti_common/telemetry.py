@@ -186,6 +186,10 @@ class Station:
     """One associated station (AP mode)."""
 
     mac: str | None = None
+    #: The station's own LAN address, as the AP last saw it. This is what makes
+    #: an ICMP round trip across the link possible without configuring anything:
+    #: an AP always knows where its stations are.
+    ip: str | None = None
     hostname: str | None = None
     signal_dbm: float | None = None
     noise_dbm: float | None = None
@@ -201,6 +205,7 @@ class Station:
         flat = flatten(data)
         return cls(
             mac=mac_or_none(pick(flat, "mac", "hwaddr", "apmac")),
+            ip=as_text(pick(flat, "lastip", "last_ip", "ip", "remote.ipaddr")),
             hostname=as_text(pick(flat, "name", "hostname", "remote.hostname")),
             signal_dbm=as_number(pick(flat, "signal", "rssi_dbm")),
             noise_dbm=as_number(pick(flat, "noisefloor", "noise")),
@@ -222,6 +227,7 @@ class Station:
         """
         return {
             "mac": self.mac,
+            "ip": self.ip,
             "hostname": self.hostname,
             "signal_dbm": self.signal_dbm,
             "noise_dbm": self.noise_dbm,

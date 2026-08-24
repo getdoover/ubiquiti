@@ -25,6 +25,7 @@ from pydoover.docker import Application
 from ubiquiti_common import discovery, netif
 from ubiquiti_common.airos import Credential
 from ubiquiti_common.models import mac_or_none
+from ubiquiti_common.ping import PingError, PingResult, ping
 from ubiquiti_common.telemetry import Telemetry
 
 from .app_config import AirMaxConfig
@@ -39,6 +40,10 @@ log = logging.getLogger(__name__)
 #: radio — but finite, so a hung session cannot stall the app indefinitely.
 PASS_TIMEOUT = 90.0
 
+#: Echo requests per pass. Enough for a loss figure to mean something (each lost
+#: packet is 20%) without making the pass noticeably longer.
+PING_COUNT = 5
+
 
 class AirMaxApplication(Application):
     config_cls = AirMaxConfig
@@ -52,6 +57,8 @@ class AirMaxApplication(Application):
         self.provisioner = Provisioner(self._settings())
         self.telemetry: Telemetry = Telemetry.offline("starting up")
         self.last_result: str | None = None
+        self.link_ping: PingResult | None = None
+        self._pinged: str | None = None
 
         interface = self.config.interface.value
 
@@ -168,6 +175,49 @@ class AirMaxApplication(Application):
         self.last_result = await self.provisioner.run_pass(devices)
         if self.provisioner.telemetry is not None:
             self.telemetry = self.provisioner.telemetry
+        await self._measure_link()
+
+    async def _measure_link(self) -> None:
+        """ICMP round trip to the radio at the far end of the link.
+
+        This is the app's real latency figure. airOS's own `wlanTxLatency` is TDMA
+        queue latency — 0 on an uncongested link, 1 ms resolution — so it says
+        nothing about a link that is long, marginal, or dropping packets.
+
+        A failure to *run* ping is logged and leaves the reading absent; a failure
+        to get answers back is a 100% loss reading, which is the most valuable
+        thing this measures.
+        """
+        self.link_ping = None
+        if not self.telemetry.online:
+            return
+        peer = self._peer_address()
+        if not peer:
+            return
+        if peer != self._pinged:
+            log.info("measuring link latency against peer %s", peer)
+            self._pinged = peer
+        try:
+            self.link_ping = await ping(peer, count=PING_COUNT)
+        except PingError as exc:
+            log.warning("cannot ping link peer %s: %s", peer, exc)
+
+    def _peer_address(self) -> str | None:
+        """Where the far end of this link lives.
+
+        Configured value wins. Failing that, an AP can work it out for itself:
+        `wstalist` reports each associated station's last known address, so the
+        common case needs no config at all. A *client* has no equivalent — its
+        `mca-status` names the AP by MAC, not by address — so on a client this
+        has to be configured or there is no measurement.
+        """
+        configured = (self.config.peer_address.value or "").strip()
+        if configured:
+            return configured
+        for station in self.telemetry.stations:
+            if station.ip:
+                return station.ip
+        return None
 
     def _found_target(self, devices: list) -> bool:
         spec = self.provisioner.spec
@@ -270,7 +320,11 @@ class AirMaxApplication(Application):
 
         await self.tags.tx_rate.set(tel.tx_rate_mbps)
         await self.tags.rx_rate.set(tel.rx_rate_mbps)
-        await self.tags.latency.set(tel.latency_ms)
+        # Deliberately the ping result, not `tel.latency_ms` (airMAX queue
+        # latency, which is 0 on every healthy link).
+        p = self.link_ping
+        await self.tags.latency.set(p.rtt_avg_ms if p else None)
+        await self.tags.packet_loss.set(p.loss_pct if p else None)
         await self.tags.tx_throughput.set(tel.tx_throughput_kbps)
         await self.tags.rx_throughput.set(tel.rx_throughput_kbps)
 

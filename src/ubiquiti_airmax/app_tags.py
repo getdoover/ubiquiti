@@ -31,15 +31,18 @@ class AirMaxTags(Tags):
     # ------------------------------------------------------ rates + throughput
     tx_rate = Tag("number", default=None, live=True, log_on=Delta(amount=10.0))
     rx_rate = Tag("number", default=None, live=True, log_on=Delta(amount=10.0))
-    # airOS "Latency" (wlanTxLatency), in ms.
+    # Real ICMP round trip to the radio at the far end of the link, in ms.
     #
-    # This is airMAX *TX queue* latency — how long a frame waits for a TDMA slot
-    # — not a round trip. It is legitimately 0 on an uncongested link, and link
-    # length cannot show up in it: 10 km of air is 0.067 ms round trip, far below
-    # this field's 1 ms resolution. Treat non-zero as a congestion signal.
+    # NOT airOS's own latency field. `wlanTxLatency` is airMAX TX *queue* latency:
+    # legitimately 0 on an uncongested link, at 1 ms resolution, so it can express
+    # neither link length (10 km of air is 0.067 ms) nor link health. It is still
+    # parsed in telemetry.py, and deliberately not published.
     #
-    # Delta must stay well under 1 ms or the interesting range never logs at all.
+    # Delta must stay well under 1 ms or a healthy link's whole range never logs.
     latency = Tag("number", default=None, live=True, log_on=Delta(amount=0.5))
+    #: The half of the ping result that usually matters more. A link can hold a
+    #: fine RTT while dropping a fifth of its packets.
+    packet_loss = Tag("number", default=None, live=True, log_on=Delta(amount=5.0))
     tx_throughput = Tag("number", default=None, live=True, log_on=Delta(amount=100.0))
     rx_throughput = Tag("number", default=None, live=True, log_on=Delta(amount=100.0))
 

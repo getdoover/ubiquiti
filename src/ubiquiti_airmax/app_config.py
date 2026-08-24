@@ -133,6 +133,19 @@ class AirMaxConfig(config.Schema):
             "otherwise leaves it drawn as unconnected."
         ),
     )
+    peer_address = config.String(
+        "Link Peer Address",
+        name="peer_address",
+        default="",
+        description=(
+            "IP of the radio at the FAR end of this link, pinged each pass to "
+            "measure real round-trip latency and packet loss. Leave blank on an "
+            "AP: it learns its stations' addresses itself. A client cannot, so "
+            "set it there. Pinging this radio's own address measures the LAN "
+            "hop, not the link."
+        ),
+    )
+
     overrides = config.Array(
         "Config Overrides",
         name="overrides",

@@ -235,6 +235,19 @@
                             "currentValue": "$tag.app().latency:number:null",
                             "decPrecision": 2,
                             "live": true
+                        },
+                        "packet_loss": {
+                            "name": "packet_loss",
+                            "type": "uiVariable",
+                            "displayString": "Packet Loss",
+                            "showActivity": true,
+                            "position": 61,
+                            "hidden": false,
+                            "units": "%",
+                            "varType": "float",
+                            "currentValue": "$tag.app().packet_loss:number:null",
+                            "decPrecision": 0,
+                            "live": true
                         }
                     }
                 },
@@ -251,7 +264,7 @@
                             "type": "uiVariable",
                             "displayString": "Stations Connected",
                             "showActivity": true,
-                            "position": 62,
+                            "position": 63,
                             "hidden": false,
                             "varType": "float",
                             "currentValue": "$tag.app().station_count:number:null",
@@ -262,7 +275,7 @@
                             "type": "uiVariable",
                             "displayString": "Stations",
                             "showActivity": true,
-                            "position": 63,
+                            "position": 64,
                             "hidden": false,
                             "varType": "string",
                             "currentValue": "$tag.app().stations:string:null"
@@ -272,7 +285,7 @@
                             "type": "uiVariable",
                             "displayString": "AP MAC",
                             "showActivity": true,
-                            "position": 64,
+                            "position": 65,
                             "hidden": false,
                             "varType": "string",
                             "currentValue": "$tag.app().ap_mac:string:null"
@@ -282,7 +295,7 @@
                             "type": "uiVariable",
                             "displayString": "Distance",
                             "showActivity": true,
-                            "position": 65,
+                            "position": 66,
                             "hidden": false,
                             "units": "m",
                             "varType": "float",
@@ -305,7 +318,7 @@
                             "type": "uiVariable",
                             "displayString": "Model",
                             "showActivity": true,
-                            "position": 67,
+                            "position": 68,
                             "hidden": false,
                             "varType": "string",
                             "currentValue": "$tag.app().model:string:null"
@@ -315,7 +328,7 @@
                             "type": "uiVariable",
                             "displayString": "Platform",
                             "showActivity": true,
-                            "position": 68,
+                            "position": 69,
                             "hidden": false,
                             "varType": "string",
                             "currentValue": "$tag.app().platform:string:null"
@@ -325,7 +338,7 @@
                             "type": "uiVariable",
                             "displayString": "IP Address",
                             "showActivity": true,
-                            "position": 69,
+                            "position": 70,
                             "hidden": false,
                             "varType": "string",
                             "currentValue": "$tag.app().ip_address:string:null"
@@ -335,7 +348,7 @@
                             "type": "uiVariable",
                             "displayString": "ESSID",
                             "showActivity": true,
-                            "position": 70,
+                            "position": 71,
                             "hidden": false,
                             "varType": "string",
                             "currentValue": "$tag.app().essid:string:null"
@@ -345,7 +358,7 @@
                             "type": "uiVariable",
                             "displayString": "Mode",
                             "showActivity": true,
-                            "position": 71,
+                            "position": 72,
                             "hidden": false,
                             "varType": "string",
                             "currentValue": "$tag.app().wireless_mode:string:null"
@@ -355,7 +368,7 @@
                             "type": "uiVariable",
                             "displayString": "Frequency",
                             "showActivity": true,
-                            "position": 72,
+                            "position": 73,
                             "hidden": false,
                             "units": "MHz",
                             "varType": "float",
@@ -367,7 +380,7 @@
                             "type": "uiVariable",
                             "displayString": "Channel Width",
                             "showActivity": true,
-                            "position": 73,
+                            "position": 74,
                             "hidden": false,
                             "units": "MHz",
                             "varType": "float",
@@ -379,7 +392,7 @@
                             "type": "uiVariable",
                             "displayString": "Radio Uptime",
                             "showActivity": true,
-                            "position": 74,
+                            "position": 75,
                             "hidden": false,
                             "units": "h",
                             "varType": "float",
@@ -391,7 +404,7 @@
                             "type": "uiTimestamp",
                             "displayString": "Radio Booted",
                             "showActivity": true,
-                            "position": 75,
+                            "position": 76,
                             "hidden": false,
                             "varType": "timestamp",
                             "currentValue": "$tag.app().started_at_ms:number:null"
@@ -469,6 +482,19 @@
                     "default": "",
                     "x-position": 4
                 },
+                "peer_address": {
+                    "title": "Link Peer Address",
+                    "x-name": "peer_address",
+                    "x-hidden": false,
+                    "type": [
+                        "string",
+                        "null"
+                    ],
+                    "x-required": false,
+                    "description": "IP of the radio at the FAR end of this link, pinged each pass to measure real round-trip latency and packet loss. Leave blank on an AP: it learns its stations' addresses itself. A client cannot, so set it there. Pinging this radio's own address measures the LAN hop, not the link.",
+                    "default": "",
+                    "x-position": 5
+                },
                 "overrides": {
                     "title": "Config Overrides",
                     "x-name": "overrides",
@@ -480,7 +506,7 @@
                     "x-required": false,
                     "description": "The airOS keys to set for THIS radio. Everything else on the radio is left alone. Applied on top of Profile Overrides, so a key set here wins. Leave both empty to run as telemetry-only.",
                     "default": [],
-                    "x-position": 5,
+                    "x-position": 6,
                     "items": {
                         "title": "Override",
                         "x-name": "override",
@@ -530,7 +556,7 @@
                     "x-required": false,
                     "description": "After this many failed pushes the radio is parked and left alone. This is what stops a config that never converges becoming a reboot loop.",
                     "default": 3,
-                    "x-position": 6,
+                    "x-position": 7,
                     "minimum": 1,
                     "maximum": 20
                 },
@@ -545,7 +571,7 @@
                     "x-required": false,
                     "description": "Minimum wait before retrying after a failed attempt.",
                     "default": 300,
-                    "x-position": 7,
+                    "x-position": 8,
                     "minimum": 10
                 },
                 "failed_retry_after": {
@@ -559,7 +585,7 @@
                     "x-required": false,
                     "description": "How long a parked radio waits before trying again, so a transient failure heals itself. 0 means never retry. Editing the overrides or variables also clears a parked radio immediately.",
                     "default": 3600,
-                    "x-position": 8,
+                    "x-position": 9,
                     "minimum": 0
                 },
                 "interface": {
@@ -573,7 +599,7 @@
                     "x-required": false,
                     "description": "LAN interface to discover and provision on. MUST NOT be the interface carrying this device's default route \u2014 the app refuses to start if it is.",
                     "default": "eth0",
-                    "x-position": 9
+                    "x-position": 10
                 },
                 "manage_addresses": {
                     "title": "Manage Interface Addresses",
@@ -586,7 +612,7 @@
                     "x-required": false,
                     "description": "Temporarily add a secondary address so a factory radio on 192.168.1.20 is reachable from another subnet. Needs NET_ADMIN. Removed again after each attempt.",
                     "default": true,
-                    "x-position": 10
+                    "x-position": 11
                 },
                 "poll_interval": {
                     "title": "Poll Interval (s)",
@@ -599,7 +625,7 @@
                     "x-required": false,
                     "description": "How often to sweep for the radio and read its telemetry. Also the resolution of the graphs in the UI.",
                     "default": 30,
-                    "x-position": 11,
+                    "x-position": 12,
                     "minimum": 5
                 },
                 "discovery_timeout": {
@@ -613,7 +639,7 @@
                     "x-required": false,
                     "description": "How long to listen for discovery replies each sweep.",
                     "default": 3.0,
-                    "x-position": 12
+                    "x-position": 13
                 },
                 "reboot_wait": {
                     "title": "Reboot Wait (s)",
@@ -626,7 +652,7 @@
                     "x-required": false,
                     "description": "How long to wait for the radio to come back after a reboot before verifying. It returns on its NEW address, which discovery re-finds.",
                     "default": 120,
-                    "x-position": 13,
+                    "x-position": 14,
                     "minimum": 30
                 },
                 "ssh_port": {
@@ -639,7 +665,7 @@
                     ],
                     "x-required": false,
                     "default": 22,
-                    "x-position": 14
+                    "x-position": 15
                 },
                 "credentials": {
                     "title": "Credentials",
@@ -658,7 +684,7 @@
                             "label": "factory default"
                         }
                     ],
-                    "x-position": 15,
+                    "x-position": 16,
                     "items": {
                         "title": "Credential",
                         "x-name": "credential",
@@ -734,7 +760,7 @@
                     "x-required": false,
                     "description": "Exactly the same as Config Overrides \u2014 airOS keys to set \u2014 but kept as a separate list so a Doover config profile can supply a shared layer without overwriting the per-install one. Put settings common to every radio of this role here (mode, SSID, PSK, frequency, country) and per-radio settings in Config Overrides, which are applied afterwards and win on any key set in both.",
                     "default": [],
-                    "x-position": 16,
+                    "x-position": 17,
                     "items": {
                         "title": "Profile Override",
                         "x-name": "profile_override",

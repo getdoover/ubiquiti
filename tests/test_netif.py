@@ -33,10 +33,15 @@ async def test_missing_iproute2_raises_netif_error_not_filenotfound(monkeypatch)
 @pytest.mark.parametrize(
     "target,expected",
     [
-        ("192.168.1.20", "192.168.1.254/24"),
-        ("10.4.5.6", "10.4.5.254/24"),
+        ("192.168.1.20", "192.168.1.123/24"),
+        ("10.4.5.6", "10.4.5.123/24"),
         # Never hand back the radio's own address.
-        ("192.168.1.254", "192.168.1.253/24"),
+        ("192.168.1.123", "192.168.1.122/24"),
+        # Not a gateway address, not the airOS factory default, and below the
+        # range a dnsmasq pool would hand out. A Doovit was found with a
+        # duplicate .1 on br0; that was not this app (it has never used .1), but
+        # .254 was no better a neighbour.
+        ("192.168.1.20", "192.168.1.123/24"),
     ],
 )
 def test_helper_address_avoids_collisions(target, expected):
@@ -83,7 +88,7 @@ async def test_reachable_adds_and_always_removes_the_address(monkeypatch):
             raise RuntimeError("provisioning blew up")
 
     # The temporary address must not survive a failure mid-provision.
-    assert added == ["192.168.1.254/24"]
+    assert added == ["192.168.1.123/24"]
     assert removed == added
 
 
@@ -108,8 +113,8 @@ async def test_off_subnet_radio_on_the_uplink_interface_is_still_provisioned(
     monkeypatch.setattr(netif, "remove_address", remove)
 
     async with netif.reachable("br0", "192.168.1.20") as cidr:
-        assert cidr == "192.168.1.254/24"
-    assert added == [("br0", "192.168.1.254/24")]
+        assert cidr == "192.168.1.123/24"
+    assert added == [("br0", "192.168.1.123/24")]
     assert removed == added
 
 

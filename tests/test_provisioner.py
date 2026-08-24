@@ -515,7 +515,7 @@ async def test_address_holder_adds_once_and_reuses(monkeypatch):
     holder = prov.AddressHolder()
     for _ in range(5):
         await holder.ensure("eth0", "192.168.1.20")
-    assert added == ["192.168.1.254/24"], "must add exactly once"
+    assert added == ["192.168.1.123/24"], "must add exactly once"
     assert removed == []
 
     await holder.release()
@@ -543,8 +543,8 @@ async def test_address_holder_swaps_when_the_radio_moves(monkeypatch):
     holder = prov.AddressHolder()
     await holder.ensure("eth0", "192.168.1.20")
     await holder.ensure("eth0", "10.4.5.6")
-    assert added == ["192.168.1.254/24", "10.4.5.254/24"]
-    assert removed == ["192.168.1.254/24"], "old address must be dropped"
+    assert added == ["192.168.1.123/24", "10.4.5.123/24"]
+    assert removed == ["192.168.1.123/24"], "old address must be dropped"
 
 
 # ------------------------------------------------------------- deployment delay

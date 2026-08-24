@@ -31,8 +31,15 @@ class AirMaxTags(Tags):
     # ------------------------------------------------------ rates + throughput
     tx_rate = Tag("number", default=None, live=True, log_on=Delta(amount=10.0))
     rx_rate = Tag("number", default=None, live=True, log_on=Delta(amount=10.0))
-    # airOS "Latency" (wlanTxLatency), in ms. Reads 0 on a short link.
-    latency = Tag("number", default=None, live=True, log_on=Delta(amount=2.0))
+    # airOS "Latency" (wlanTxLatency), in ms.
+    #
+    # This is airMAX *TX queue* latency — how long a frame waits for a TDMA slot
+    # — not a round trip. It is legitimately 0 on an uncongested link, and link
+    # length cannot show up in it: 10 km of air is 0.067 ms round trip, far below
+    # this field's 1 ms resolution. Treat non-zero as a congestion signal.
+    #
+    # Delta must stay well under 1 ms or the interesting range never logs at all.
+    latency = Tag("number", default=None, live=True, log_on=Delta(amount=0.5))
     tx_throughput = Tag("number", default=None, live=True, log_on=Delta(amount=100.0))
     rx_throughput = Tag("number", default=None, live=True, log_on=Delta(amount=100.0))
 

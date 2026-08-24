@@ -133,7 +133,9 @@ class AirMaxUI(ui.UI):
                 value=T.latency,
                 name="latency",
                 units="ms",
-                precision=0,
+                # Not 0: the whole useful range of this field is sub-millisecond
+                # on a healthy link, and precision=0 rendered all of it as "0".
+                precision=2,
             ),
         ],
     )

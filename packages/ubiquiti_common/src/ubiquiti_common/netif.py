@@ -108,11 +108,25 @@ async def remove_address(interface: str, cidr: str) -> None:
     log.info("removed provisioning address %s from %s", cidr, interface)
 
 
-def helper_address_for(target_ip: str, prefix_len: int = 24, host: int = 254) -> str:
+#: Host octet borrowed when a radio is off-subnet.
+#:
+#: Deliberately an unremarkable mid-range address. The obvious candidates are all
+#: worse: ``.1`` and ``.254`` are conventional gateway addresses, ``.20`` is the
+#: airOS factory default, and anything above ``.150`` risks colliding with a
+#: dnsmasq lease on a Doovit still running ``doovit_dnsmasq``. ``.123`` sits in the
+#: block the Porgera plan keeps free for staging.
+HELPER_HOST = 123
+
+
+def helper_address_for(
+    target_ip: str, prefix_len: int = 24, host: int = HELPER_HOST
+) -> str:
     """Pick an address in ``target_ip``'s subnet for us to borrow.
 
-    Defaults to ``.254`` because airOS devices ship on ``.20`` and Ubiquiti's own
-    tooling tends to sit low in the range; ``.254`` keeps us out of the way.
+    See :data:`HELPER_HOST` for why that octet. The address is transient — added
+    only for a radio that is off-subnet, and removed on the way out of
+    :func:`reachable` — but a *collision* is not transient in its effects, so the
+    choice matters more than the lifetime suggests.
     """
     network = ipaddress.ip_network(f"{target_ip}/{prefix_len}", strict=False)
     candidate = network.network_address + host

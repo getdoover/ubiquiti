@@ -233,7 +233,7 @@
                             "units": "ms",
                             "varType": "float",
                             "currentValue": "$tag.app().latency:number:null",
-                            "decPrecision": 0,
+                            "decPrecision": 2,
                             "live": true
                         }
                     }

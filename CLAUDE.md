@@ -129,6 +129,12 @@ convergence is a background concern that reports its state.
   `test_setup_does_not_guard_the_provisioning_interface`.
   The genuine risk is *subnet overlap* — a helper address in a range already
   routed elsewhere — which the old check never detected anyway.
+- **The helper address is `.123` (`netif.HELPER_HOST`).** Every obvious octet is
+  worse: `.1` and `.254` are conventional gateway addresses, `.20` is the airOS
+  factory default, and `.150`+ can collide with a `doovit_dnsmasq` lease. Note
+  that this app has *never* used `.1` — a Doovit found with a duplicate
+  `192.168.1.1` on `br0` was not caused by it. Addresses this app adds carry the
+  label `br0:doover-prov`, so `ip -o addr show` tells you whose they are.
 
 ## Ubiquiti Network Overview
 

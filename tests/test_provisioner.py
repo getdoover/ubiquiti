@@ -621,3 +621,68 @@ async def test_editing_the_config_restarts_the_delay(radio):
     await p.run_pass([device()])
     assert radio.writes == 0, "new intent must serve a fresh delay"
     assert p.state is TargetState.DRIFTED
+
+
+# ------------------------------------------------------ password hash guard
+#
+# airOS stores users.N.password as a crypt hash and compares crypt(entered)
+# against it. Verified against a real radio: regenerating its stored value with
+# `openssl passwd -1 -salt EC25aZzE 'dredge101!'` reproduced it byte for byte.
+#
+# So a passphrase written into that key can never match anything, and the radio
+# is locked out until someone presses its reset button. On a mast at Porgera that
+# is a site visit, so this is refused rather than written.
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "dredge101!",  # the actual passphrase — the dangerous case
+        "",  # empty
+        "hunter2",
+        "$1$onlytwoparts",  # malformed
+        "notahash$1$x$y",  # hash-ish but not anchored
+    ],
+)
+def test_password_override_refuses_anything_but_a_crypt_hash(value):
+    with pytest.raises(prov.OverlayError, match="crypt hash"):
+        prov.build_overlay([prov.Override("users.1.password", value)])
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "$1$EC25aZzE$xu1o7GxJU2vdvIE/iEP4/0",  # real value off a radio
+        "$1$tL963iDU$SXu0h02ZZYfnoZcPkIlK21",  # factory value
+        "$6$somesalt$somelongdigestvalue",  # sha512-crypt, also acceptable
+    ],
+)
+def test_password_override_accepts_a_crypt_hash(value):
+    assert prov.build_overlay([prov.Override("users.1.password", value)]) == {
+        "users.1.password": value
+    }
+
+
+def test_guard_applies_to_any_user_index():
+    with pytest.raises(prov.OverlayError, match="crypt hash"):
+        prov.build_overlay([prov.Override("users.2.password", "plaintext")])
+
+
+def test_guard_does_not_touch_other_keys():
+    """Only the password field is hash-only; PSKs and communities are plaintext."""
+    overlay = prov.build_overlay(
+        [
+            prov.Override("aaa.1.wpa.psk", "a-real-passphrase"),
+            prov.Override("snmp.community", "public"),
+            prov.Override("users.1.name", "admin"),
+        ]
+    )
+    assert overlay["aaa.1.wpa.psk"] == "a-real-passphrase"
+    assert overlay["users.1.name"] == "admin"
+
+
+async def test_plaintext_password_fails_the_target_without_writing(radio):
+    p = make(overrides=[prov.Override("users.1.password", "dredge101!")])
+    await p.run_pass([device()])
+    assert p.state is TargetState.FAILED
+    assert radio.writes == 0, "must never reach the radio"

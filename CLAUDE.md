@@ -171,12 +171,26 @@ renders confidently instead of erroring.
   the two ends are polled independently. When both report, the AP-side signal is
   kept alongside the station's — the disagreement between the ends is itself the
   diagnosis.
-- **Layout is per *device*, not per radio** (`lib/layout.ts`). dagre ranks the
-  Doovits by RF hops and radios stack inside their box. Ranking a dozen boxes is
-  far more stable than two dozen loose nodes, so the diagram does not reshuffle
-  when one radio drops out. Deliberately hierarchical, not force-directed: the
-  topology is a daisy chain, and a physics layout of a chain drifts between
-  renders and hides which hop is bad.
+- **Layout is per *device*, not per radio** (`lib/layout.ts`). Radios stack
+  inside their device's box. Ranking a dozen boxes is far more stable than two
+  dozen loose nodes, so the diagram does not reshuffle when one radio drops out.
+- **A chain is serpentined, not drawn in one line.** Nine sites laid out
+  left-to-right is nine box-widths across and one tall — a strip no screen shows
+  usefully. `pathOrder` walks the component end to end and `serpentineCell`
+  wraps it into rows that alternate direction, which took a 9-site fleet from
+  roughly 13:1 to 1.64:1. Anything that is not a simple path (a node of degree 3,
+  or a ring, which has no end to start from) falls back to dagre — a serpentine
+  would imply an order those topologies do not have.
+- **Edge handles are chosen from the final geometry** (`pickHandles`), never
+  fixed. A serpentine sends hops right on one row, left on the next and downward
+  at each wrap; hardcoding right-to-left routed half the edges backwards through
+  their own boxes. Every radio node therefore exposes a source *and* a target
+  handle on all four sides.
+- **Full screen is a portal to `document.body`, not a bigger div.** The widget
+  renders inside the customer site's panel, which establishes stacking and
+  overflow contexts a nested element cannot escape — growing in place just gets
+  clipped. React Flow only fits on mount, so the canvas is keyed on the expanded
+  flag to force a re-fit at the new size.
 - **A radio with no `radio_mac` is never dropped**, it goes to the tray below the
   diagram. That is every radio until the topology-tag release reaches the fleet.
 - **SNR bands are conventional, not reported by the hardware.** `SNR_BANDS` in

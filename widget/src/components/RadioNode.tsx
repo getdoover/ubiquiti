@@ -24,12 +24,22 @@ function RadioNodeInner({ data }: { data: { radio: Radio } }) {
       className="flex h-full w-full items-center gap-2 rounded-lg border border-border bg-card px-2 shadow-sm"
       title={`${radio.deviceName} · ${radio.appKey} · ${STATE_LABEL[state]}`}
     >
-      {/* Handles on both sides so an RF hop attaches whichever way dagre ranked
-          the two sites, and top/bottom for the LAN link inside a box. */}
-      <Handle id="l" type="target" position={Position.Left} className="!opacity-0" />
-      <Handle id="r" type="source" position={Position.Right} className="!opacity-0" />
-      <Handle id="t" type="target" position={Position.Top} className="!opacity-0" />
-      <Handle id="b" type="source" position={Position.Bottom} className="!opacity-0" />
+      {/* A source and a target on every side. The serpentine layout sends hops
+          left-to-right on one row, right-to-left on the next and downwards at
+          each wrap, so which side an edge needs is only known once positions
+          are computed — `pickHandles` decides, and every direction has to be
+          available for it to choose from. */}
+      {([
+        ["l", Position.Left],
+        ["r", Position.Right],
+        ["t", Position.Top],
+        ["b", Position.Bottom],
+      ] as const).map(([side, position]) => (
+        <span key={side}>
+          <Handle id={`${side}-t`} type="target" position={position} className="!opacity-0" />
+          <Handle id={`${side}-s`} type="source" position={position} className="!opacity-0" />
+        </span>
+      ))}
 
       <span
         className="relative flex h-7 w-7 shrink-0 items-center justify-center rounded-full"

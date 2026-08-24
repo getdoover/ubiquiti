@@ -1,7 +1,8 @@
 import "./styles.css";
 import "@xyflow/react/dist/style.css";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 
 import RemoteComponentWrapper from "customer_site/RemoteComponentWrapper";
 import { useRemoteParams } from "customer_site/useRemoteParams";
@@ -16,6 +17,7 @@ import {
 import { peekDooverClient } from "doover-js";
 
 import { Background, Controls, MiniMap, ReactFlow } from "@xyflow/react";
+import { Maximize2, Minimize2 } from "lucide-react";
 
 import { Badge } from "./components/ui/badge";
 import { Button } from "./components/ui/button";
@@ -280,6 +282,80 @@ function RadioTable({ radios }: { radios: Radio[] }) {
   );
 }
 
+/**
+ * The graph itself.
+ *
+ * Rendered either inline or, when expanded, portalled to `document.body` at
+ * `position: fixed`. A portal is the only thing that reliably escapes the host:
+ * the widget sits inside the customer site's own panel, which establishes
+ * stacking and overflow contexts a nested element cannot break out of, so
+ * growing the element in place gets clipped to the panel rather than filling
+ * the screen. Both other Doover dashboard widgets do the same.
+ */
+function GraphCanvas({
+  nodes,
+  edges,
+  expanded,
+  onToggleExpanded,
+  selectedRadio,
+  onSelect,
+}: {
+  nodes: unknown[];
+  edges: unknown[];
+  expanded: boolean;
+  onToggleExpanded: () => void;
+  selectedRadio: Radio | null;
+  onSelect: (id: string | null) => void;
+}) {
+  const canvas = (
+    <div
+      className={
+        expanded
+          ? "fixed inset-0 z-[9999] bg-background"
+          : // Sized against the viewport rather than a fixed pixel height, so
+            // the diagram uses the space the host actually gives it.
+            "relative h-[min(68vh,640px)] w-full overflow-hidden rounded-xl border border-border bg-background"
+      }
+    >
+      <ReactFlow
+        // Remounted on expand so `fitView` re-runs against the new size —
+        // React Flow fits on mount, not on container resize.
+        key={expanded ? "expanded" : "inline"}
+        nodes={nodes as never}
+        edges={edges as never}
+        nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
+        fitView
+        fitViewOptions={{ padding: 0.12 }}
+        minZoom={0.1}
+        maxZoom={2}
+        nodesConnectable={false}
+        onNodeClick={(_, node) => onSelect(String(node.id))}
+        onPaneClick={() => onSelect(null)}
+      >
+        <Background gap={18} size={1} />
+        <Controls showInteractive={false} />
+        <MiniMap pannable zoomable />
+      </ReactFlow>
+
+      <button
+        type="button"
+        onClick={onToggleExpanded}
+        title={expanded ? "Exit full screen (Esc)" : "Full screen"}
+        className="absolute right-3 top-3 z-10 rounded-md border border-border bg-card p-1.5 text-muted-foreground shadow-sm hover:text-foreground"
+      >
+        {expanded ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+      </button>
+
+      {selectedRadio && (
+        <DetailPanel radio={selectedRadio} onClose={() => onSelect(null)} />
+      )}
+    </div>
+  );
+
+  return expanded ? createPortal(canvas, document.body) : canvas;
+}
+
 function NetworkOverviewWidgetInner({ uiElement }: { uiElement?: UiRemoteComponentOverview }) {
   const params = useRemoteParams();
   const agentId = params?.agentId;
@@ -287,6 +363,18 @@ function NetworkOverviewWidgetInner({ uiElement }: { uiElement?: UiRemoteCompone
 
   const [view, setView] = useState<"diagram" | "table">("diagram");
   const [selected, setSelected] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState(false);
+
+  // Escape leaves full screen. Registered unconditionally — hooks cannot sit
+  // behind the early returns below.
+  useEffect(() => {
+    if (!expanded) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setExpanded(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [expanded]);
 
   const { radios, devicesGranted, isLoading, hasDeviceMap } = useRadios(agentId, appKey);
   const topology = useMemo(() => buildTopology(radios), [radios]);
@@ -366,28 +454,14 @@ function NetworkOverviewWidgetInner({ uiElement }: { uiElement?: UiRemoteCompone
 
       {view === "diagram" ? (
         <>
-          <div className="relative h-[520px] w-full overflow-hidden rounded-xl border border-border bg-background">
-            <ReactFlow
-              nodes={nodes as never}
-              edges={edges as never}
-              nodeTypes={nodeTypes}
-              edgeTypes={edgeTypes}
-              fitView
-              proOptions={{ hideAttribution: false }}
-              minZoom={0.2}
-              maxZoom={2}
-              nodesConnectable={false}
-              onNodeClick={(_, node) => setSelected(String(node.id))}
-              onPaneClick={() => setSelected(null)}
-            >
-              <Background gap={18} size={1} />
-              <Controls showInteractive={false} />
-              <MiniMap pannable zoomable />
-            </ReactFlow>
-            {selectedRadio && (
-              <DetailPanel radio={selectedRadio} onClose={() => setSelected(null)} />
-            )}
-          </div>
+          <GraphCanvas
+            nodes={nodes}
+            edges={edges}
+            expanded={expanded}
+            onToggleExpanded={() => setExpanded((value) => !value)}
+            selectedRadio={selectedRadio}
+            onSelect={setSelected}
+          />
           <Legend />
           {topology.danglingPeers.length > 0 && (
             <p className="text-[11px] text-muted-foreground">

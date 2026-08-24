@@ -40,6 +40,12 @@ log = logging.getLogger(__name__)
 # worse than one it rejects — so an invalid key is refused, never written.
 _VALID_KEY = re.compile(r"^[A-Za-z0-9_.\-]+$")
 
+#: Keys whose value airOS stores as a crypt hash, never as a passphrase.
+_HASHED_KEY = re.compile(r"^users\.[0-9]+\.password$")
+#: A crypt hash: ``$id$salt$digest``. airOS uses ``$1$`` (MD5-crypt), verified by
+#: regenerating a radio's stored value with ``openssl passwd -1``.
+_CRYPT_HASH = re.compile(r"^\$[0-9a-z]{1,2}\$[^$]+\$[^$]+$")
+
 
 @dataclass
 class Override:
@@ -76,6 +82,15 @@ def build_overlay(overrides: list[Override]) -> cfg.Config:
             raise OverlayError(
                 f"{key}: value {value!r} looks like a leftover template "
                 "placeholder. Values are literal — write the actual value."
+            )
+        if _HASHED_KEY.match(key) and not _CRYPT_HASH.match(value):
+            # airOS stores this field verbatim and compares crypt(entered) against
+            # it. A passphrase written here can therefore never match, and the
+            # radio is locked out until someone presses its reset button — which
+            # for a mast-mounted unit means a site visit. Refuse rather than brick.
+            raise OverlayError(
+                f"{key}: value must be a crypt hash like '$1$salt$digest', not a "
+                "passphrase. Generate one with: openssl passwd -1 '<password>'"
             )
         result[key] = value
     return result

@@ -108,7 +108,6 @@ the reset button — so the defaults are conservative:
 | **Deployment Delay** | 30 s | Holds the first write of a new config so a whole network can be updated and deployed together, then apply at once. Telemetry and the pending diff keep reporting while it waits. 0 = immediate. |
 | **Failed Retry After** | 1 h | A parked radio retries once, later, so transient failures self-heal. 0 = never. |
 | Expected Model | optional | Refuses to provision unless the discovered model matches — catches a MAC typo. |
-| Interface guard | — | Refuses to add a helper address to the interface carrying the default route (warns at startup if shared). |
 
 The attempt ceiling matters more than it looks, because it is the *only* guard
 against a key that cannot converge. There is deliberately no exclusion list: every
@@ -134,11 +133,11 @@ the cooldown does it. Both are bounded, so neither can become a slow reboot loop
   from another subnet means temporarily adding an address in its range. The
   address is removed again after each attempt.
 
-Point **Provisioning Interface** at a dedicated LAN port. Adding
-`192.168.1.0/24` to the interface carrying the Doovit's default route can
-black-hole the Doover connection — and what you'd lose remote access to is the
-device doing the provisioning. The app checks and refuses, but pick correctly
-anyway.
+Point **Provisioning Interface** at whichever interface reaches the radios — on a
+Doovit that is often `br0`, which may also carry the device's own uplink. That is
+fine: a helper address is only added when the radio is off-subnet, and adding one
+does not disturb an existing default route. Set **Manage Interface Addresses**
+false to disable address changes entirely.
 
 ## Bench tool
 

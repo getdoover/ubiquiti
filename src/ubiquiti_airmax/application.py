@@ -14,8 +14,6 @@ Design notes worth knowing before changing anything here:
 * When the radio is unreachable, telemetry tags are left at their last value
   rather than zeroed. A signal of 0 dBm is an extremely *strong* reading, not a
   missing one, and zeroing would draw a cliff on every graph.
-* The app refuses to start if the provisioning interface carries this device's
-  default route — see :func:`ubiquiti_common.netif.assert_safe_interface`.
 """
 
 import asyncio
@@ -54,14 +52,6 @@ class AirMaxApplication(Application):
         self.last_result: str | None = None
 
         interface = self.config.interface.value
-        if await netif.carries_default_route(interface):
-            log.warning(
-                "provisioning interface %s also carries this device's default route. "
-                "Radios already reachable in its subnet provision normally, but "
-                "adding a helper address there would risk this device's own uplink, "
-                "so that will be refused.",
-                interface,
-            )
 
         self._sync_config()
         log.info(

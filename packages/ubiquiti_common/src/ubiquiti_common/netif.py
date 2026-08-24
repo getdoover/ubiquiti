@@ -87,43 +87,6 @@ async def broadcast_addresses(interface: str) -> list[str]:
     return out
 
 
-async def default_route_interface() -> str | None:
-    """The interface carrying the default route, if any."""
-    raw = json.loads(await _ip("-j", "route", "show", "default") or "[]")
-    for route in raw:
-        if route.get("dev"):
-            return route["dev"]
-    return None
-
-
-async def carries_default_route(interface: str) -> bool:
-    """Whether ``interface`` is the one carrying this device's default route."""
-    try:
-        return (await default_route_interface()) == interface
-    except NetifError:
-        return False
-
-
-async def assert_safe_interface(interface: str) -> None:
-    """Refuse to *add an address to* the interface carrying our own uplink.
-
-    Adding ``192.168.1.x/24`` to the interface that carries the Doovit's default
-    route can black-hole the Doover connection — and the thing we would lose
-    remote access to is the thing doing the provisioning. Fail loudly instead.
-
-    This is deliberately not a startup check. A Doovit commonly bridges its LAN
-    and its uplink onto one interface (``br0`` with the default route *and* the
-    radio's subnet), where no address needs adding and nothing is at risk.
-    """
-    default_iface = await default_route_interface()
-    if default_iface and default_iface == interface:
-        raise NetifError(
-            f"refusing to use {interface!r} for provisioning: it carries the default "
-            "route, so adding a provisioning address risks cutting this device's own "
-            "uplink. Pick a dedicated LAN interface."
-        )
-
-
 async def is_reachable(interface: str, ip: str) -> bool:
     """True if ``ip`` falls inside a subnet already configured on ``interface``."""
     target = ipaddress.ip_address(ip)
@@ -162,19 +125,18 @@ def helper_address_for(target_ip: str, prefix_len: int = 24, host: int = 254) ->
 async def reachable(interface: str, target_ip: str, prefix_len: int = 24):
     """Ensure ``target_ip`` is routable for the duration of the block.
 
-    If the address is already reachable this is a no-op — which is the common case
-    on a Doovit whose LAN bridge is already in the radio's subnet, and is why the
-    default-route check below lives here rather than at startup. Only when we
-    genuinely have to reshape the interface is it dangerous, so only then do we
-    refuse.
+    If the address is already reachable this is a no-op — the common case on a
+    Doovit whose LAN bridge is already in the radio's subnet. An address is only
+    added for a radio that is off-subnet, which in practice means a factory-default
+    unit on 192.168.1.20, and it is removed again on exit.
+
+    There is no default-route check. Adding a secondary address does not disturb an
+    existing default route: it only adds a connected route for the new subnet. Set
+    ``manage_addresses`` false to disable this entirely.
     """
     if await is_reachable(interface, target_ip):
         yield None
         return
-
-    # We are about to add an address. THIS is the dangerous case, not merely
-    # sharing an interface with the default route.
-    await assert_safe_interface(interface)
 
     cidr = helper_address_for(target_ip, prefix_len)
     await add_address(interface, cidr)

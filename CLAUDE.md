@@ -80,13 +80,16 @@ convergence is a background concern that reports its state.
   `test_intent_change_revives_a_parked_radio`,
   `test_identical_config_reload_does_not_revive_a_parked_radio`.
 - **Only the configured MAC is ever written to.**
-- **The interface guard is fatal where it matters.** Adding a helper address to
-  the interface carrying the default route can cut the device's own uplink, so
-  `netif.reachable()` refuses at the moment an address would be added. Sharing
-  that interface is only a *startup warning*: station-1's `br0` is
-  192.168.1.10/24 and carries the default route, with the radio at .12 already
-  reachable — nothing needs adding, so nothing is at risk. Do not promote this
-  back to a startup failure; it would block that (normal) deployment.
+- **No default-route guard, deliberately.** Adding a secondary address only adds
+  a connected route for that subnet; it does not disturb an existing default
+  route. A guard here was wrong twice — first fatal at startup (crash-looped
+  station-1, whose `br0` carries both the uplink and the radio's subnet), then as
+  a `netif.reachable()` refusal that would have blocked a factory radio on that
+  same interface. `manage_addresses` is the off-switch. Pinned by
+  `test_no_default_route_guard_remains` and
+  `test_setup_does_not_guard_the_provisioning_interface`.
+  The genuine risk is *subnet overlap* — a helper address in a range already
+  routed elsewhere — which the old check never detected anyway.
 
 ## Environment facts
 

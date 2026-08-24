@@ -1,4 +1,12 @@
-"""Interface helpers, including the guard that stops us cutting our own uplink."""
+"""Interface helpers.
+
+There is deliberately **no default-route guard**. Adding a secondary address only
+adds a connected route for that subnet — it does not disturb an existing default
+route. An earlier guard here refused to provision over any interface carrying the
+default route, which crash-looped a perfectly healthy install on station-1, whose
+`br0` carries both the uplink and the target radio's subnet. `manage_addresses` is
+the off-switch.
+"""
 
 import asyncio
 
@@ -22,31 +30,6 @@ async def test_missing_iproute2_raises_netif_error_not_filenotfound(monkeypatch)
         await netif.interface_addresses("eth0")
 
 
-async def test_assert_safe_interface_refuses_the_default_route_interface(monkeypatch):
-    async def default_iface():
-        return "eth0"
-
-    monkeypatch.setattr(netif, "default_route_interface", default_iface)
-    with pytest.raises(netif.NetifError, match="default route"):
-        await netif.assert_safe_interface("eth0")
-
-
-async def test_assert_safe_interface_allows_a_different_interface(monkeypatch):
-    async def default_iface():
-        return "wwan0"
-
-    monkeypatch.setattr(netif, "default_route_interface", default_iface)
-    await netif.assert_safe_interface("eth0")  # must not raise
-
-
-async def test_assert_safe_interface_allows_when_there_is_no_default_route(monkeypatch):
-    async def no_default():
-        return None
-
-    monkeypatch.setattr(netif, "default_route_interface", no_default)
-    await netif.assert_safe_interface("eth0")
-
-
 @pytest.mark.parametrize(
     "target,expected",
     [
@@ -60,17 +43,23 @@ def test_helper_address_avoids_collisions(target, expected):
     assert netif.helper_address_for(target) == expected
 
 
+# --------------------------------------------------------------- reachable()
+
+
 async def test_reachable_is_a_noop_when_already_in_subnet(monkeypatch):
-    calls = []
+    """The common case on a Doovit whose LAN bridge is already in the radio's
+    subnet — nothing is added, so nothing has to be cleaned up."""
+    added = []
 
     async def already(interface, ip):
         return True
 
     monkeypatch.setattr(netif, "is_reachable", already)
-    monkeypatch.setattr(netif, "add_address", lambda *a, **k: calls.append(a))
-    async with netif.reachable("eth0", "192.168.1.20") as cidr:
+    monkeypatch.setattr(netif, "add_address", lambda *a, **k: added.append(a))
+
+    async with netif.reachable("br0", "192.168.1.12") as cidr:
         assert cidr is None
-    assert calls == []
+    assert added == [], "must not touch an interface it did not need to touch"
 
 
 async def test_reachable_adds_and_always_removes_the_address(monkeypatch):
@@ -85,11 +74,7 @@ async def test_reachable_adds_and_always_removes_the_address(monkeypatch):
     async def remove(interface, cidr):
         removed.append(cidr)
 
-    async def safe_iface():
-        return "wwan0"  # reachable() now checks this before adding
-
     monkeypatch.setattr(netif, "is_reachable", not_reachable)
-    monkeypatch.setattr(netif, "default_route_interface", safe_iface)
     monkeypatch.setattr(netif, "add_address", add)
     monkeypatch.setattr(netif, "remove_address", remove)
 
@@ -102,49 +87,40 @@ async def test_reachable_adds_and_always_removes_the_address(monkeypatch):
     assert removed == added
 
 
-# -------------------------------------------------------- shared-interface case
-#
-# Observed on station-1: br0 is 192.168.1.10/24 AND carries the default route,
-# with the radio at 192.168.1.12. Nothing needs adding, so nothing is at risk —
-# an unconditional startup refusal would have blocked a perfectly safe setup.
+async def test_off_subnet_radio_on_the_uplink_interface_is_still_provisioned(
+    monkeypatch,
+):
+    """station-1's shape: br0 carries the default route. A factory radio on
+    192.168.1.20 there must get its helper address, not be refused."""
+    added, removed = [], []
 
-
-async def test_shared_interface_is_fine_when_radio_already_reachable(monkeypatch):
-    async def already(interface, ip):
-        return True
-
-    async def default_iface():
-        return "br0"
-
-    added = []
-    monkeypatch.setattr(netif, "is_reachable", already)
-    monkeypatch.setattr(netif, "default_route_interface", default_iface)
-    monkeypatch.setattr(netif, "add_address", lambda *a, **k: added.append(a))
-
-    async with netif.reachable("br0", "192.168.1.12") as cidr:
-        assert cidr is None
-    assert added == [], "must not touch an interface it did not need to touch"
-
-
-async def test_shared_interface_still_refuses_when_an_address_is_needed(monkeypatch):
     async def not_reachable(interface, ip):
         return False
 
-    async def default_iface():
-        return "br0"
+    async def add(interface, cidr, label="doover-prov"):
+        added.append((interface, cidr))
+
+    async def remove(interface, cidr):
+        removed.append((interface, cidr))
 
     monkeypatch.setattr(netif, "is_reachable", not_reachable)
-    monkeypatch.setattr(netif, "default_route_interface", default_iface)
+    monkeypatch.setattr(netif, "add_address", add)
+    monkeypatch.setattr(netif, "remove_address", remove)
 
-    with pytest.raises(netif.NetifError, match="default route"):
-        async with netif.reachable("br0", "10.9.9.9"):
-            pass
+    async with netif.reachable("br0", "192.168.1.20") as cidr:
+        assert cidr == "192.168.1.254/24"
+    assert added == [("br0", "192.168.1.254/24")]
+    assert removed == added
 
 
-async def test_carries_default_route(monkeypatch):
-    async def default_iface():
-        return "br0"
+def test_no_default_route_guard_remains():
+    """Pinned: this guard was wrong twice. Do not reintroduce it."""
+    import inspect
 
-    monkeypatch.setattr(netif, "default_route_interface", default_iface)
-    assert await netif.carries_default_route("br0") is True
-    assert await netif.carries_default_route("eth1") is False
+    for gone in (
+        "assert_safe_interface",
+        "carries_default_route",
+        "default_route_interface",
+    ):
+        assert not hasattr(netif, gone), f"{gone} should not exist"
+    assert "default_route" not in inspect.getsource(netif.reachable)

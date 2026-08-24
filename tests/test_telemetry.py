@@ -354,3 +354,38 @@ def test_station_describe_still_reads_as_prose():
     """to_dict is a sibling of describe, not a replacement — the UI shows both."""
     station = t.Station.from_mapping({"mac": "28:70:4E:E2:96:B9", "signal": -61})
     assert "28:70:4e:e2:96:b9" in station.describe()
+
+
+# ------------------------------------------------------------------ latency
+#
+# airOS reports it as "Latency" in its own UI. Two spellings seen on real
+# hardware (Bullet AC IP67, 2WA.v8.7.11): `wlanTxLatency` in mca-status, and
+# `tx_latency` per station in wstalist. Both read 0 on a bench link (distance
+# 1 m), which is correct rather than missing.
+
+
+def test_latency_from_mca_status():
+    assert t.Telemetry.from_status({"wlanTxLatency": "4"}).latency_ms == 4.0
+
+
+def test_latency_from_station_entry():
+    assert t.Station.from_mapping({"tx_latency": 11}).latency_ms == 11.0
+
+
+def test_zero_latency_is_kept_not_dropped():
+    """0 ms is a real reading on a short link, not a missing value."""
+    assert t.Telemetry.from_status({"wlanTxLatency": "0"}).latency_ms == 0.0
+
+
+def test_absent_latency_is_none():
+    assert t.Telemetry.from_status({"signal": "-60"}).latency_ms is None
+
+
+def test_txlatency_is_not_mistaken_for_a_rate():
+    """Regression: `txlatency` was listed as an alias for tx_rate_mbps, so a
+    latency reading was published as the TX rate."""
+    r = t.Telemetry.from_status({"txlatency": "9"})
+    assert r.latency_ms == 9.0
+    assert r.tx_rate_mbps is None, "latency must never populate a rate field"
+    s = t.Station.from_mapping({"txlatency": 9})
+    assert s.latency_ms == 9.0 and s.tx_rate_mbps is None

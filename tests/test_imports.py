@@ -73,7 +73,9 @@ def test_ui_has_no_provisioning_controls():
     assert "uiAction" not in types
     # But the telemetry the UI exists for must be there.
     names = {name for name, _ in walk(schema)}
-    for expected in ("snr", "link", "throughput", "peers", "device"):
+    # "link" (Link Quality) removed deliberately: SNR is the headline
+    # readout, and Signal/Noise remain on the history plot.
+    for expected in ("snr", "throughput", "peers", "device"):
         assert expected in names, f"{expected} missing from the UI"
 
 

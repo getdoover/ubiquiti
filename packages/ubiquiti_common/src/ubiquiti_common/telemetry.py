@@ -192,6 +192,7 @@ class Station:
     ccq_pct: float | None = None
     tx_rate_mbps: float | None = None
     rx_rate_mbps: float | None = None
+    latency_ms: float | None = None
     uptime_s: float | None = None
     distance_m: float | None = None
 
@@ -204,8 +205,9 @@ class Station:
             signal_dbm=as_number(pick(flat, "signal", "rssi_dbm")),
             noise_dbm=as_number(pick(flat, "noisefloor", "noise")),
             ccq_pct=_scale_ccq(as_number(pick(flat, "ccq", "airmax.quality"))),
-            tx_rate_mbps=as_number(pick(flat, "tx", "txrate", "tx_rate", "txlatency")),
+            tx_rate_mbps=as_number(pick(flat, "tx", "txrate", "tx_rate")),
             rx_rate_mbps=as_number(pick(flat, "rx", "rxrate", "rx_rate")),
+            latency_ms=as_number(pick(flat, "tx_latency", "txlatency", "latency")),
             uptime_s=as_number(pick(flat, "uptime", "assoctime")),
             distance_m=as_number(pick(flat, "distance")),
         )
@@ -226,6 +228,7 @@ class Station:
             "ccq_pct": self.ccq_pct,
             "tx_rate_mbps": self.tx_rate_mbps,
             "rx_rate_mbps": self.rx_rate_mbps,
+            "latency_ms": self.latency_ms,
             "uptime_s": self.uptime_s,
             "distance_m": self.distance_m,
         }
@@ -270,6 +273,7 @@ class Telemetry:
     # rates and throughput
     tx_rate_mbps: float | None = None
     rx_rate_mbps: float | None = None
+    latency_ms: float | None = None
     tx_throughput_kbps: float | None = None
     rx_throughput_kbps: float | None = None
 
@@ -344,6 +348,11 @@ class Telemetry:
             # interfaces.0.stats.tx (a byte counter) on a JSON status document.
             # In a wstalist station entry "tx" really is the rate, so Station
             # keeps it.
+            # airOS reports this as "Latency" in its own UI, in milliseconds.
+            # Reads 0 on a bench link (distance 1 m) — verified on Pump 8's client.
+            latency_ms=as_number(
+                pick(status, "wlanTxLatency", "tx_latency", "txlatency", "latency")
+            ),
             tx_rate_mbps=as_number(pick(status, "txrate", "tx_rate", "wlanTxRate")),
             rx_rate_mbps=as_number(pick(status, "rxrate", "rx_rate", "wlanRxRate")),
             # ``deviceId`` is the flat ``mca-status`` spelling and the only one

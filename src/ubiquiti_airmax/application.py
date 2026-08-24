@@ -270,6 +270,7 @@ class AirMaxApplication(Application):
 
         await self.tags.tx_rate.set(tel.tx_rate_mbps)
         await self.tags.rx_rate.set(tel.rx_rate_mbps)
+        await self.tags.latency.set(tel.latency_ms)
         await self.tags.tx_throughput.set(tel.tx_throughput_kbps)
         await self.tags.rx_throughput.set(tel.rx_throughput_kbps)
 

@@ -31,6 +31,8 @@ class AirMaxTags(Tags):
     # ------------------------------------------------------ rates + throughput
     tx_rate = Tag("number", default=None, live=True, log_on=Delta(amount=10.0))
     rx_rate = Tag("number", default=None, live=True, log_on=Delta(amount=10.0))
+    # airOS "Latency" (wlanTxLatency), in ms. Reads 0 on a short link.
+    latency = Tag("number", default=None, live=True, log_on=Delta(amount=2.0))
     tx_throughput = Tag("number", default=None, live=True, log_on=Delta(amount=100.0))
     rx_throughput = Tag("number", default=None, live=True, log_on=Delta(amount=100.0))
 

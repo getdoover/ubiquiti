@@ -66,17 +66,6 @@
                             "units": "dBm",
                             "live": true
                         },
-                        "airmax_ccq": {
-                            "name": "airmax_ccq",
-                            "displayString": "airMAX CCQ",
-                            "dataType": "unknown",
-                            "lookup": "$tag.app().ccq:number:null",
-                            "active": false,
-                            "colour": "orange",
-                            "sharedAxis": false,
-                            "units": "%",
-                            "live": true
-                        },
                         "rx_throughput": {
                             "name": "rx_throughput",
                             "displayString": "RX Throughput",
@@ -174,132 +163,6 @@
                     "currentValue": "$cmds.app().config_warning",
                     "can_cancel": true
                 },
-                "link": {
-                    "name": "link",
-                    "type": "uiSubmodule",
-                    "displayString": "Link Quality",
-                    "showActivity": true,
-                    "position": 30,
-                    "hidden": false,
-                    "children": {
-                        "signal": {
-                            "name": "signal",
-                            "type": "uiVariable",
-                            "displayString": "Signal",
-                            "showActivity": true,
-                            "position": 56,
-                            "hidden": false,
-                            "units": "dBm",
-                            "varType": "float",
-                            "currentValue": "$tag.app().signal:number:null",
-                            "decPrecision": 0,
-                            "ranges": [
-                                {
-                                    "min": -100,
-                                    "max": -80,
-                                    "colour": "red",
-                                    "show_on_graph": true,
-                                    "label": "Weak"
-                                },
-                                {
-                                    "min": -80,
-                                    "max": -70,
-                                    "colour": "yellow",
-                                    "show_on_graph": true,
-                                    "label": "Fair"
-                                },
-                                {
-                                    "min": -70,
-                                    "max": -50,
-                                    "colour": "green",
-                                    "show_on_graph": true,
-                                    "label": "Good"
-                                },
-                                {
-                                    "min": -50,
-                                    "max": 0,
-                                    "colour": "yellow",
-                                    "show_on_graph": true,
-                                    "label": "Hot"
-                                }
-                            ],
-                            "live": true
-                        },
-                        "noise_floor": {
-                            "name": "noise_floor",
-                            "type": "uiVariable",
-                            "displayString": "Noise Floor",
-                            "showActivity": true,
-                            "position": 57,
-                            "hidden": false,
-                            "units": "dBm",
-                            "varType": "float",
-                            "currentValue": "$tag.app().noise_floor:number:null",
-                            "decPrecision": 0,
-                            "live": true
-                        },
-                        "ccq": {
-                            "name": "ccq",
-                            "type": "uiVariable",
-                            "displayString": "airMAX CCQ",
-                            "showActivity": true,
-                            "position": 58,
-                            "hidden": false,
-                            "units": "%",
-                            "varType": "float",
-                            "currentValue": "$tag.app().ccq:number:null",
-                            "decPrecision": 0,
-                            "ranges": [
-                                {
-                                    "min": 0,
-                                    "max": 60,
-                                    "colour": "red",
-                                    "show_on_graph": true,
-                                    "label": "Poor"
-                                },
-                                {
-                                    "min": 60,
-                                    "max": 85,
-                                    "colour": "yellow",
-                                    "show_on_graph": true,
-                                    "label": "Fair"
-                                },
-                                {
-                                    "min": 85,
-                                    "max": 100,
-                                    "colour": "green",
-                                    "show_on_graph": true,
-                                    "label": "Good"
-                                }
-                            ],
-                            "live": true
-                        },
-                        "quality": {
-                            "name": "quality",
-                            "type": "uiVariable",
-                            "displayString": "airMAX Quality",
-                            "showActivity": true,
-                            "position": 59,
-                            "hidden": false,
-                            "units": "%",
-                            "varType": "float",
-                            "currentValue": "$tag.app().quality:number:null",
-                            "decPrecision": 0
-                        },
-                        "capacity": {
-                            "name": "capacity",
-                            "type": "uiVariable",
-                            "displayString": "airMAX Capacity",
-                            "showActivity": true,
-                            "position": 60,
-                            "hidden": false,
-                            "units": "%",
-                            "varType": "float",
-                            "currentValue": "$tag.app().capacity:number:null",
-                            "decPrecision": 0
-                        }
-                    }
-                },
                 "throughput": {
                     "name": "throughput",
                     "type": "uiSubmodule",
@@ -313,7 +176,7 @@
                             "type": "uiVariable",
                             "displayString": "TX Rate",
                             "showActivity": true,
-                            "position": 62,
+                            "position": 56,
                             "hidden": false,
                             "units": "Mbps",
                             "varType": "float",
@@ -326,7 +189,7 @@
                             "type": "uiVariable",
                             "displayString": "RX Rate",
                             "showActivity": true,
-                            "position": 63,
+                            "position": 57,
                             "hidden": false,
                             "units": "Mbps",
                             "varType": "float",
@@ -339,7 +202,7 @@
                             "type": "uiVariable",
                             "displayString": "TX Throughput",
                             "showActivity": true,
-                            "position": 64,
+                            "position": 58,
                             "hidden": false,
                             "units": "kbps",
                             "varType": "float",
@@ -352,11 +215,24 @@
                             "type": "uiVariable",
                             "displayString": "RX Throughput",
                             "showActivity": true,
-                            "position": 65,
+                            "position": 59,
                             "hidden": false,
                             "units": "kbps",
                             "varType": "float",
                             "currentValue": "$tag.app().rx_throughput:number:null",
+                            "decPrecision": 0,
+                            "live": true
+                        },
+                        "latency": {
+                            "name": "latency",
+                            "type": "uiVariable",
+                            "displayString": "Link Latency",
+                            "showActivity": true,
+                            "position": 60,
+                            "hidden": false,
+                            "units": "ms",
+                            "varType": "float",
+                            "currentValue": "$tag.app().latency:number:null",
                             "decPrecision": 0,
                             "live": true
                         }
@@ -375,7 +251,7 @@
                             "type": "uiVariable",
                             "displayString": "Stations Connected",
                             "showActivity": true,
-                            "position": 67,
+                            "position": 62,
                             "hidden": false,
                             "varType": "float",
                             "currentValue": "$tag.app().station_count:number:null",
@@ -386,7 +262,7 @@
                             "type": "uiVariable",
                             "displayString": "Stations",
                             "showActivity": true,
-                            "position": 68,
+                            "position": 63,
                             "hidden": false,
                             "varType": "string",
                             "currentValue": "$tag.app().stations:string:null"
@@ -396,7 +272,7 @@
                             "type": "uiVariable",
                             "displayString": "AP MAC",
                             "showActivity": true,
-                            "position": 69,
+                            "position": 64,
                             "hidden": false,
                             "varType": "string",
                             "currentValue": "$tag.app().ap_mac:string:null"
@@ -406,7 +282,7 @@
                             "type": "uiVariable",
                             "displayString": "Distance",
                             "showActivity": true,
-                            "position": 70,
+                            "position": 65,
                             "hidden": false,
                             "units": "m",
                             "varType": "float",
@@ -429,7 +305,7 @@
                             "type": "uiVariable",
                             "displayString": "Model",
                             "showActivity": true,
-                            "position": 72,
+                            "position": 67,
                             "hidden": false,
                             "varType": "string",
                             "currentValue": "$tag.app().model:string:null"
@@ -439,7 +315,7 @@
                             "type": "uiVariable",
                             "displayString": "Platform",
                             "showActivity": true,
-                            "position": 73,
+                            "position": 68,
                             "hidden": false,
                             "varType": "string",
                             "currentValue": "$tag.app().platform:string:null"
@@ -449,7 +325,7 @@
                             "type": "uiVariable",
                             "displayString": "IP Address",
                             "showActivity": true,
-                            "position": 74,
+                            "position": 69,
                             "hidden": false,
                             "varType": "string",
                             "currentValue": "$tag.app().ip_address:string:null"
@@ -459,7 +335,7 @@
                             "type": "uiVariable",
                             "displayString": "ESSID",
                             "showActivity": true,
-                            "position": 75,
+                            "position": 70,
                             "hidden": false,
                             "varType": "string",
                             "currentValue": "$tag.app().essid:string:null"
@@ -469,7 +345,7 @@
                             "type": "uiVariable",
                             "displayString": "Mode",
                             "showActivity": true,
-                            "position": 76,
+                            "position": 71,
                             "hidden": false,
                             "varType": "string",
                             "currentValue": "$tag.app().wireless_mode:string:null"
@@ -479,7 +355,7 @@
                             "type": "uiVariable",
                             "displayString": "Frequency",
                             "showActivity": true,
-                            "position": 77,
+                            "position": 72,
                             "hidden": false,
                             "units": "MHz",
                             "varType": "float",
@@ -491,7 +367,7 @@
                             "type": "uiVariable",
                             "displayString": "Channel Width",
                             "showActivity": true,
-                            "position": 78,
+                            "position": 73,
                             "hidden": false,
                             "units": "MHz",
                             "varType": "float",
@@ -503,7 +379,7 @@
                             "type": "uiVariable",
                             "displayString": "Radio Uptime",
                             "showActivity": true,
-                            "position": 79,
+                            "position": 74,
                             "hidden": false,
                             "units": "h",
                             "varType": "float",
@@ -515,7 +391,7 @@
                             "type": "uiTimestamp",
                             "displayString": "Radio Booted",
                             "showActivity": true,
-                            "position": 80,
+                            "position": 75,
                             "hidden": false,
                             "varType": "timestamp",
                             "currentValue": "$tag.app().started_at_ms:number:null"

@@ -41,14 +41,6 @@ class AirMaxUI(ui.UI):
                 active=False,
             ),
             ui.Series(
-                "airMAX CCQ",
-                value=T.ccq,
-                units="%",
-                colour=ui.Colour.orange,
-                shared_axis=False,
-                active=False,
-            ),
-            ui.Series(
                 "RX Throughput",
                 value=T.rx_throughput,
                 units="kbps",
@@ -111,61 +103,6 @@ class AirMaxUI(ui.UI):
     )
 
     # ---- link quality -----------------------------------------------------
-    link = ui.Submodule(
-        "Link Quality",
-        name="link",
-        position=30,
-        children=[
-            ui.NumericVariable(
-                "Signal",
-                value=T.signal,
-                name="signal",
-                units="dBm",
-                precision=0,
-                ranges=[
-                    ui.Range("Weak", -100, -80, ui.Colour.red, show_on_graph=True),
-                    ui.Range("Fair", -80, -70, ui.Colour.yellow, show_on_graph=True),
-                    ui.Range("Good", -70, -50, ui.Colour.green, show_on_graph=True),
-                    ui.Range("Hot", -50, 0, ui.Colour.yellow, show_on_graph=True),
-                ],
-            ),
-            ui.NumericVariable(
-                "Noise Floor",
-                value=T.noise_floor,
-                name="noise_floor",
-                units="dBm",
-                precision=0,
-            ),
-            ui.NumericVariable(
-                "airMAX CCQ",
-                value=T.ccq,
-                name="ccq",
-                units="%",
-                precision=0,
-                ranges=[
-                    ui.Range("Poor", 0, 60, ui.Colour.red, show_on_graph=True),
-                    ui.Range("Fair", 60, 85, ui.Colour.yellow, show_on_graph=True),
-                    ui.Range("Good", 85, 100, ui.Colour.green, show_on_graph=True),
-                ],
-            ),
-            ui.NumericVariable(
-                "airMAX Quality",
-                value=T.quality,
-                name="quality",
-                units="%",
-                precision=0,
-            ),
-            ui.NumericVariable(
-                "airMAX Capacity",
-                value=T.capacity,
-                name="capacity",
-                units="%",
-                precision=0,
-            ),
-        ],
-    )
-
-    # ---- rates and throughput --------------------------------------------
     throughput = ui.Submodule(
         "Rates & Throughput",
         name="throughput",
@@ -189,6 +126,13 @@ class AirMaxUI(ui.UI):
                 value=T.rx_throughput,
                 name="rx_throughput",
                 units="kbps",
+                precision=0,
+            ),
+            ui.NumericVariable(
+                "Link Latency",
+                value=T.latency,
+                name="latency",
+                units="ms",
                 precision=0,
             ),
         ],
